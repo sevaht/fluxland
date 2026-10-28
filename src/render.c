@@ -681,6 +681,47 @@ set_font_size(PangoFontDescription *desc, const struct wm_font *font,
 		pango_font_description_set_size(desc, size);
 }
 
+/*
+ * A font's Pango description: its family (or, for "pango:..." fonts, the
+ * whole description as GTK writes it), size, weight and slant
+ */
+static PangoFontDescription *
+font_description(const struct wm_font *font, float scale)
+{
+	if (font->family && strncmp(font->family, "pango:", 6) == 0) {
+		PangoFontDescription *desc =
+			pango_font_description_from_string(font->family + 6);
+		if (desc) {
+			if (scale != 1.0f) {
+				int size = pango_font_description_get_size(desc);
+				if (pango_font_description_get_size_is_absolute(desc))
+					pango_font_description_set_absolute_size(
+						desc, size * scale);
+				else
+					pango_font_description_set_size(desc,
+						(int)(size * scale + 0.5f));
+			}
+			if (font->bold)
+				pango_font_description_set_weight(desc,
+					PANGO_WEIGHT_BOLD);
+			if (font->italic)
+				pango_font_description_set_style(desc,
+					PANGO_STYLE_ITALIC);
+			return desc;
+		}
+	}
+
+	PangoFontDescription *desc = pango_font_description_new();
+	pango_font_description_set_family(desc,
+		font->family ? font->family : "sans");
+	set_font_size(desc, font, scale);
+	if (font->bold)
+		pango_font_description_set_weight(desc, PANGO_WEIGHT_BOLD);
+	if (font->italic)
+		pango_font_description_set_style(desc, PANGO_STYLE_ITALIC);
+	return desc;
+}
+
 /* --- Public API: text rendering --- */
 
 cairo_surface_t *
@@ -713,14 +754,7 @@ wm_render_text(const char *text, const struct wm_font *font,
 	 */
 	ensure_measurement_context();
 
-	PangoFontDescription *desc = pango_font_description_new();
-	pango_font_description_set_family(desc,
-		font->family ? font->family : "sans");
-	set_font_size(desc, font, scale);
-	if (font->bold)
-		pango_font_description_set_weight(desc, PANGO_WEIGHT_BOLD);
-	if (font->italic)
-		pango_font_description_set_style(desc, PANGO_STYLE_ITALIC);
+	PangoFontDescription *desc = font_description(font, scale);
 	pango_layout_set_font_description(measure_layout, desc);
 	pango_font_description_free(desc);
 
@@ -765,14 +799,7 @@ wm_render_text(const char *text, const struct wm_font *font,
 	PangoLayout *layout = pango_cairo_create_layout(cr);
 
 	/* Re-apply layout properties for rendering context */
-	desc = pango_font_description_new();
-	pango_font_description_set_family(desc,
-		font->family ? font->family : "sans");
-	set_font_size(desc, font, scale);
-	if (font->bold)
-		pango_font_description_set_weight(desc, PANGO_WEIGHT_BOLD);
-	if (font->italic)
-		pango_font_description_set_style(desc, PANGO_STYLE_ITALIC);
+	desc = font_description(font, scale);
 	pango_layout_set_font_description(layout, desc);
 	pango_font_description_free(desc);
 
@@ -856,14 +883,7 @@ wm_measure_text_width(const char *text, const struct wm_font *font,
 	 */
 	ensure_measurement_context();
 
-	PangoFontDescription *desc = pango_font_description_new();
-	pango_font_description_set_family(desc,
-		font->family ? font->family : "sans");
-	set_font_size(desc, font, scale);
-	if (font->bold)
-		pango_font_description_set_weight(desc, PANGO_WEIGHT_BOLD);
-	if (font->italic)
-		pango_font_description_set_style(desc, PANGO_STYLE_ITALIC);
+	PangoFontDescription *desc = font_description(font, scale);
 	pango_layout_set_font_description(measure_layout, desc);
 	pango_font_description_free(desc);
 
@@ -884,14 +904,7 @@ wm_font_height(const struct wm_font *font, float scale)
 		return 0;
 	ensure_measurement_context();
 
-	PangoFontDescription *desc = pango_font_description_new();
-	pango_font_description_set_family(desc,
-		font->family ? font->family : "sans");
-	set_font_size(desc, font, scale);
-	if (font->bold)
-		pango_font_description_set_weight(desc, PANGO_WEIGHT_BOLD);
-	if (font->italic)
-		pango_font_description_set_style(desc, PANGO_STYLE_ITALIC);
+	PangoFontDescription *desc = font_description(font, scale);
 	PangoContext *ctx = pango_layout_get_context(measure_layout);
 	PangoFontMetrics *m = pango_context_get_metrics(ctx, desc, NULL);
 	pango_font_description_free(desc);
@@ -1113,20 +1126,37 @@ wm_render_rounded_rect_path(cairo_t *cr, double x, double y,
 	cairo_close_path(cr);
 }
 
+/* Shape.cc's bits: a pixel stays where its bit is set */
+static const unsigned char corner_masks[4][8] = {
+	{ 0xc0, 0xf8, 0xfc, 0xfe, 0xfe, 0xfe, 0xff, 0xff },
+	{ 0x03, 0x1f, 0x3f, 0x7f, 0x7f, 0x7f, 0xff, 0xff },
+	{ 0xff, 0xff, 0xfe, 0xfe, 0xfe, 0xfc, 0xf8, 0xc0 },
+	{ 0xff, 0xff, 0x7f, 0x7f, 0x7f, 0x3f, 0x1f, 0x03 },
+};
+static const uint8_t corner_which[4] = { WM_CORNER_TOP_LEFT,
+	WM_CORNER_TOP_RIGHT, WM_CORNER_BOTTOM_LEFT,
+	WM_CORNER_BOTTOM_RIGHT };
+
+bool
+wm_corner_cut_at(int frame_w, int frame_h, uint8_t corners, int px, int py)
+{
+	for (int c = 0; c < 4; c++) {
+		if (!(corners & corner_which[c]))
+			continue;
+		int col = px - ((c & 1) ? frame_w - 8 : 0);
+		int row = py - ((c & 2) ? frame_h - 8 : 0);
+		if (col < 0 || col >= 8 || row < 0 || row >= 8)
+			continue;
+		if (!(corner_masks[c][row] & (1 << col)))
+			return true;
+	}
+	return false;
+}
+
 void
 wm_cut_corners(cairo_surface_t *surface, int x, int y, int frame_w,
 	int frame_h, uint8_t corners)
 {
-	/* Shape.cc's bits: a pixel stays where its bit is set */
-	static const unsigned char masks[4][8] = {
-		{ 0xc0, 0xf8, 0xfc, 0xfe, 0xfe, 0xfe, 0xff, 0xff },
-		{ 0x03, 0x1f, 0x3f, 0x7f, 0x7f, 0x7f, 0xff, 0xff },
-		{ 0xff, 0xff, 0xfe, 0xfe, 0xfe, 0xfc, 0xf8, 0xc0 },
-		{ 0xff, 0xff, 0x7f, 0x7f, 0x7f, 0x3f, 0x1f, 0x03 },
-	};
-	static const uint8_t which[4] = { WM_CORNER_TOP_LEFT,
-		WM_CORNER_TOP_RIGHT, WM_CORNER_BOTTOM_LEFT,
-		WM_CORNER_BOTTOM_RIGHT };
 	if (!surface || !corners ||
 	    cairo_image_surface_get_format(surface) != CAIRO_FORMAT_ARGB32)
 		return;
@@ -1138,13 +1168,13 @@ wm_cut_corners(cairo_surface_t *surface, int x, int y, int frame_w,
 	if (!data)
 		return;
 	for (int c = 0; c < 4; c++) {
-		if (!(corners & which[c]))
+		if (!(corners & corner_which[c]))
 			continue;
 		int ox = (c & 1) ? frame_w - 8 : 0;
 		int oy = (c & 2) ? frame_h - 8 : 0;
 		for (int row = 0; row < 8; row++) {
 			for (int col = 0; col < 8; col++) {
-				if (masks[c][row] & (1 << col))
+				if (corner_masks[c][row] & (1 << col))
 					continue;
 				int px = ox + col - x, py = oy + row - y;
 				if (px < 0 || py < 0 || px >= sw || py >= sh)

@@ -139,6 +139,11 @@ Examples:
     DejaVu Sans\-11:bold:italic
 .fi
 .PP
+A font can also be given as a Pango font description, which can name
+a width, a variant and more:
+.BI pango: description
+.RI ( "pango:DejaVu Sans Semi-Condensed 11" ).
+.PP
 Each font resource also supports shadow properties:
 .PP
 .RS 4
@@ -308,6 +313,34 @@ Menu border width (default: 1).
 .B menu.roundCorners
 The menu's corners to round, as
 .BR window.roundCorners .
+.TP
+.B systray.tooltip.font
+The font of a tray icon's tooltip (default
+.IR "pango:DejaVu Sans 11" ;
+another is used where it is missing).
+A tray icon's tooltip is not a window's label: by default it is a dark
+rounded box with a thin border, the application's title and its
+description a line each.  Its keys are read exactly, not through the
+style's wildcards (\fI*.color\fP, \fI*.font\fP...), so the default holds
+under any style, and a style changes it by setting them:
+.TP
+.B systray.tooltip.color, systray.tooltip.borderColor, systray.tooltip.textColor
+The box's color (default
+.IR #000000 ),
+the one pixel border's
+.RI ( #191919 )
+and the text's
+.RI ( #ffffff ).
+.TP
+.B systray.tooltip.paddingLeft, .paddingRight, .paddingTop, .paddingBottom
+The space between the border and the text on each side (default 13, 14, 8
+and 8).
+.TP
+.B systray.tooltip.radius
+How round the corners are, in pixels (default 5).
+.TP
+.B systray.tooltip.alpha
+How opaque the box is, 0 to 255 (default 255).
 .TP
 .B toolbar
 Toolbar background texture.

@@ -200,6 +200,7 @@ Choose **Fluxland** in your display manager, or run `fluxland` from a text conso
 |---|---|---|---|
 | XWayland | `xwayland` | `xorg-xwayland` | X11 application support |
 | xcb, xcb-ewmh, xcb-icccm | `libxcb1-dev libxcb-ewmh-dev libxcb-icccm4-dev` | `libxcb xcb-util-wm` | XWayland EWMH/ICCCM |
+| libei (libeis) | `libei-dev` | `libei` | Input emulation of X11 programs (Steam Input, xdotool); needs XWayland |
 
 ### Runtime companions (recommended)
 

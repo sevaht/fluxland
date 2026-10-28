@@ -172,6 +172,15 @@ wm_view_move_to_workspace(struct wm_view *view, struct wm_workspace *ws)
 	view->workspace = ws;
 }
 
+/* view.c: a frame asked for, whatever the window asked for */
+static int g_force_deco_count;
+void
+wm_view_force_decoration(struct wm_view *view)
+{
+	g_force_deco_count++;
+	view->no_decoration = false;
+}
+
 /* decoration.c */
 
 void
@@ -634,6 +643,37 @@ TEST(test_hidden_alpha_deco_protection)
 	assert(c.decoration->preset == WM_DECOR_NORMAL);  /* 1027: +handle */
 }
 
+/*
+ * A [Deco] rule is an explicit wish: it gives a window a frame whatever the
+ * window asked for (a window drawing its own, one with Motif hints).  A
+ * {NONE} rule doesn't need to make one.
+ */
+TEST(test_deco_rule_forces_a_frame)
+{
+	load("[app] (a)\n  [Deco] {NORMAL}\n[end]\n"
+		"[app] (b)\n  [Deco] {NONE}\n[end]\n"
+		"[app] (c)\n  [Workspace] {2}\n[end]\n");
+	struct wm_view a, b, c;
+	new_view(&a, "a", NULL, "");
+	new_view(&b, "b", NULL, "");
+	new_view(&c, "c", NULL, "");
+	a.no_decoration = b.no_decoration = c.no_decoration = true;
+
+	g_force_deco_count = 0;
+	map_view(&a);
+	assert(g_force_deco_count == 1);
+	assert(!a.no_decoration);
+
+	map_view(&b);
+	assert(g_force_deco_count == 1);
+	assert(b.no_decoration);
+
+	/* No [Deco] at all: left as it asked */
+	map_view(&c);
+	assert(g_force_deco_count == 1);
+	assert(c.no_decoration);
+}
+
 TEST(test_workspace_jump)
 {
 	load("[app] (a)\n  [Workspace] {2}\n  [Jump] {yes}\n[end]\n"
@@ -839,6 +879,7 @@ main(void)
 	run_test_head();
 	run_test_states();
 	run_test_hidden_alpha_deco_protection();
+	run_test_deco_rule_forces_a_frame();
 	run_test_workspace_jump();
 	run_test_fluxland_1x_syntax();
 	run_test_group();

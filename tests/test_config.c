@@ -192,6 +192,40 @@ test_focus_models(void)
 	printf("  PASS: test_focus_models\n");
 }
 
+/* Test: xwayland.inputEmulation, who may inject input through XTest */
+static void
+test_input_emulation(void)
+{
+	/* Ask, with no lists, is what there is when it is not set */
+	write_file(TEST_INIT, "session.screen0.workspaces: 4\n");
+	struct wm_config *c = config_create();
+	config_load(c, TEST_INIT);
+	assert(c->eis_policy == WM_EIS_ASK);
+	assert(c->eis_allow == NULL && c->eis_deny == NULL);
+	config_destroy(c);
+
+	write_file(TEST_INIT,
+		"session.xwayland.inputEmulation: allow\n"
+		"session.xwayland.inputEmulation.allow: steam xdotool\n"
+		"session.xwayland.inputEmulation.deny: x11vnc\n");
+	c = config_create();
+	config_load(c, TEST_INIT);
+	assert(c->eis_policy == WM_EIS_ALLOW);
+	assert(strcmp(c->eis_allow, "steam xdotool") == 0);
+	assert(strcmp(c->eis_deny, "x11vnc") == 0);
+	/* Loaded again: the lists are the new ones, not added to */
+	write_file(TEST_INIT,
+		"session.xwayland.inputEmulation: Deny\n"
+		"session.xwayland.inputEmulation.allow: steam\n");
+	config_load(c, TEST_INIT);
+	assert(c->eis_policy == WM_EIS_DENY);
+	assert(strcmp(c->eis_allow, "steam") == 0);
+	assert(c->eis_deny == NULL);
+	config_destroy(c);
+
+	printf("  PASS: test_input_emulation\n");
+}
+
 /* Test: placement policy parsing */
 static void
 test_placement_policies(void)
@@ -1848,6 +1882,7 @@ main(void)
 	test_load_nonexistent();
 	test_load_basic();
 	test_focus_models();
+	test_input_emulation();
 	test_placement_policies();
 	test_workspace_names();
 	test_workspace_count_clamp();

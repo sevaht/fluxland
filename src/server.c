@@ -27,6 +27,7 @@
 #include "decoration.h"
 #include "keyboard.h"
 #include "foreign_toplevel.h"
+#include "eis.h"
 #include "ipc.h"
 #include "keybind.h"
 #include "layer_shell.h"
@@ -639,8 +640,19 @@ wm_server_init(struct wm_server *server)
 	}
 	server->window_menu = wm_menu_create_window_menu(server);
 
+	/*
+	 * The Wayland socket before the IPC server: that socket is named
+	 * after it (not the WAYLAND_DISPLAY of the compositor we may be
+	 * running inside of, whose IPC socket it would replace)
+	 */
+	server->socket = wl_display_add_socket_auto(server->wl_display);
+
 	/* IPC server */
 	wm_ipc_init(&server->ipc, server);
+
+	/* Where X11 programs' input emulation goes: before XWayland, which
+	 * looks for it when it starts */
+	wm_eis_init(server);
 
 	/* XWayland: X11 application support (compile-time optional) */
 	wm_xwayland_init(server);
@@ -651,8 +663,10 @@ wm_server_init(struct wm_server *server)
 bool
 wm_server_start(struct wm_server *server)
 {
-	/* Add a Unix socket to the Wayland display */
-	server->socket = wl_display_add_socket_auto(server->wl_display);
+	/* Add a Unix socket to the Wayland display (unless init did) */
+	if (!server->socket)
+		server->socket = wl_display_add_socket_auto(
+			server->wl_display);
 	if (!server->socket) {
 		wlr_log(WLR_ERROR, "%s", "unable to open wayland socket");
 		return false;
@@ -677,6 +691,7 @@ void
 wm_server_destroy(struct wm_server *server)
 {
 	wm_xwayland_finish(server);
+	wm_eis_finish(server);
 	wl_display_destroy_clients(server->wl_display);
 
 #ifdef WM_HAS_SYSTRAY

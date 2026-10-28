@@ -211,6 +211,18 @@ struct wm_style {
 	int menu_border_width;
 	uint8_t menu_round_corners;	/* menu.roundCorners: WM_CORNER_* */
 
+	/* A tray icon's tooltip (systray.tooltip.*) */
+	struct wm_font systray_tooltip_font;
+	struct wm_color systray_tooltip_color;
+	struct wm_color systray_tooltip_border_color;
+	struct wm_color systray_tooltip_text_color;
+	int systray_tooltip_padding_left;
+	int systray_tooltip_padding_right;
+	int systray_tooltip_padding_top;
+	int systray_tooltip_padding_bottom;
+	int systray_tooltip_radius;
+	int systray_tooltip_alpha;	/* 0 to 255 */
+
 	/* Menu bullet (submenu indicator) */
 	char *menu_bullet;		/* "triangle", "square", "diamond", "empty" */
 	enum wm_justify menu_bullet_position;	/* LEFT or RIGHT (default) */

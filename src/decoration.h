@@ -102,6 +102,9 @@ struct wm_decoration {
 	struct wm_decor_button *buttons_right;
 	int buttons_right_count;
 
+	/* A window of one size has no maximize button (Fluxbox's) */
+	bool fixed_size;
+
 	/* Decoration state */
 	bool focused;
 	bool shaded;

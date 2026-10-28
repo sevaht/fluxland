@@ -269,6 +269,30 @@ test_invalid_alpha(void)
 }
 
 static void
+test_input_emulation_validation(void)
+{
+	write_file(TEST_INIT,
+		"session.xwayland.inputEmulation: ask\n"
+		"session.xwayland.inputEmulation.allow: steam xdotool\n"
+		"session.xwayland.inputEmulation.deny: x11vnc\n"
+	);
+	struct config_result result;
+	config_result_init(&result);
+	validate_init_file(TEST_INIT, &result);
+	assert(config_result_has_errors(&result) == false);
+	config_result_destroy(&result);
+
+	write_file(TEST_INIT,
+		"session.xwayland.inputEmulation: sometimes\n"
+	);
+	config_result_init(&result);
+	validate_init_file(TEST_INIT, &result);
+	assert(config_result_has_errors(&result) == true);
+	config_result_destroy(&result);
+	printf("  PASS: test_input_emulation_validation\n");
+}
+
+static void
 test_invalid_focus_model(void)
 {
 	write_file(TEST_INIT,
@@ -1332,6 +1356,7 @@ main(void)
 	test_invalid_workspace_count();
 	test_invalid_alpha();
 	test_invalid_focus_model();
+	test_input_emulation_validation();
 	test_invalid_placement();
 	test_invalid_bool();
 	test_invalid_int();

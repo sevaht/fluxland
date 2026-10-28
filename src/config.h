@@ -170,6 +170,13 @@ enum wm_tab_placement {
 	WM_TAB_RIGHT_BOTTOM,
 };
 
+/* session.xwayland.inputEmulation */
+enum wm_eis_policy {
+	WM_EIS_ASK,	/* ask the first time a program does (default) */
+	WM_EIS_ALLOW,	/* Xorg's way: any program may */
+	WM_EIS_DENY,	/* none may */
+};
+
 struct wm_config {
 	/* Workspaces */
 	int workspace_count;
@@ -260,6 +267,11 @@ struct wm_config {
 	bool clientmenu_use_pixmap; /* clientMenu.usePixmap: icons in window lists */
 	char *systray_pin_left;     /* systray.pinLeft: ids, the first leftmost */
 	char *systray_pin_right;    /* systray.pinRight */
+	/* xwayland.inputEmulation: what X11 programs injecting input
+	 * (XTest) may do; the programs' names, separated by spaces or commas */
+	int eis_policy;             /* enum wm_eis_policy */
+	char *eis_allow;
+	char *eis_deny;
 	int tab_placement;          /* enum wm_tab_placement */
 	int tab_width;              /* an external tab's length (64) */
 	int tab_padding;            /* padding between tabs in pixels */

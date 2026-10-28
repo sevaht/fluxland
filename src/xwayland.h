@@ -38,6 +38,7 @@ struct wm_xwayland_atoms {
 	xcb_atom_t net_wm_window_type_notification;
 	xcb_atom_t net_wm_window_type_dock;
 	xcb_atom_t net_wm_window_type_desktop;
+	xcb_atom_t motif_wm_hints;
 };
 
 /* Classification of an X11 window for compositor management */

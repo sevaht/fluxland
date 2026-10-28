@@ -1099,39 +1099,19 @@ handle_cursor_button(struct wl_listener *listener, void *data)
 	}
 
 #ifdef WM_HAS_SYSTRAY
-	/* Check if click is in the systray area */
-	if (server->systray && server->toolbar &&
-	    server->toolbar->visible) {
-		struct wm_toolbar *tb = server->toolbar;
-		double cx = server->cursor->x;
-		double cy = server->cursor->y;
-		double tb_local_x = cx - tb->x;
-		double tb_local_y = cy - tb->y;
-		if (tb_local_x >= 0 && tb_local_x < tb->width &&
-		    tb_local_y >= 0 && tb_local_y < tb->height) {
-			/* Compute systray x offset within toolbar */
-			int systray_x = 0;
-			if (tb->tool_count > 0) {
-				struct wm_toolbar_tool *last =
-					&tb->tools[tb->tool_count - 1];
-				systray_x = last->x + last->width;
-			}
-			double st_local_x = tb_local_x - systray_x;
-			int st_width = wm_systray_get_width(
-				server->systray);
-			if (st_local_x >= 0 && st_local_x < st_width) {
-				if (wm_systray_handle_click(
-					server->systray,
-					st_local_x, tb_local_y,
-					event->button)) {
-					wlr_seat_pointer_notify_button(
-						server->seat,
-						event->time_msec,
-						event->button,
-						event->state);
-					return;
-				}
-			}
+	/* A click on a tray icon, wherever the systemtray tool is */
+	if (server->systray && wm_toolbar_contains(server->toolbar,
+		server->cursor->x, server->cursor->y)) {
+		if (wm_systray_handle_click(server->systray,
+			server->cursor->x - server->systray->x,
+			server->cursor->y - server->systray->y,
+			event->button)) {
+			wlr_seat_pointer_notify_button(
+				server->seat,
+				event->time_msec,
+				event->button,
+				event->state);
+			return;
 		}
 	}
 #endif

@@ -449,6 +449,11 @@ wm_view_ensure_decoration(struct wm_view *view)
 	    preset != WM_DECOR_NORMAL)
 		wm_decoration_set_preset(view->decoration, preset,
 			view->server->style);
+	/* what the window asked for beats the default */
+	if (view->decoration && view->deco_hint != WM_DECOR_NORMAL)
+		wm_decoration_set_preset(view->decoration,
+			(enum wm_decor_preset)view->deco_hint,
+			view->server->style);
 	if (view->decoration)
 		offset_surface_tree(view);
 }
@@ -903,10 +908,18 @@ wm_view_update_icon(struct wm_view *view)
 
 /* --- Toggle decoration --- */
 
+void wm_view_force_decoration(struct wm_view *view);
+
 void
 wm_view_toggle_decoration(struct wm_view *view)
 {
-	if (!view || !view->decoration) {
+	if (!view) {
+		return;
+	}
+	if (!view->decoration) {
+		/* one that draws its own: asked for, it gets ours too */
+		if (view->no_decoration)
+			wm_view_force_decoration(view);
 		return;
 	}
 
@@ -945,6 +958,52 @@ wm_view_toggle_decoration(struct wm_view *view)
 				break;
 			}
 		}
+	}
+}
+
+/*
+ * An explicit wish for a frame (a [Deco] rule, ToggleDecor) beats what the
+ * window asked for: it gets one, and shown
+ */
+void
+wm_view_force_decoration(struct wm_view *view)
+{
+	if (!view)
+		return;
+	view->no_decoration = false;
+	if (view->decoration) {
+		if (!view->show_decoration)
+			wm_view_toggle_decoration(view);
+		return;
+	}
+	wm_view_ensure_decoration(view);
+	if (view->decoration && view == view->server->focused_view &&
+	    view->server->style)
+		wm_decoration_set_focused(view->decoration, true,
+			view->server->style);
+}
+
+/*
+ * A window that draws its own decorations (it asked for client-side ones
+ * through xdg-decoration: Electron's frameless windows, Discord's among
+ * them) gets none of ours; one that gives that up gets them.  What
+ * _MOTIF_WM_HINTS does for an X11 window.  Mostly this is before the map,
+ * which only sets the flag; a window already shown has its frame hidden or
+ * shown.
+ */
+void
+wm_view_set_client_decorated(struct wm_view *view, bool client_side)
+{
+	if (!view || view->no_decoration == client_side)
+		return;
+	view->no_decoration = client_side;
+
+	if (view->decoration) {
+		/* shown when it should hide, or hidden when it should show */
+		if (view->show_decoration == client_side)
+			wm_view_toggle_decoration(view);
+	} else if (!client_side && view->mapped) {
+		wm_view_ensure_decoration(view);
 	}
 }
 

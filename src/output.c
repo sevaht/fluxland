@@ -19,6 +19,7 @@
 #include "wallpaper.h"
 #include "config.h"
 #include "drm_lease.h"
+#include "eis.h"
 #include "foreign_toplevel.h"
 #include "ipc.h"
 #include "layer_shell.h"
@@ -122,6 +123,7 @@ handle_layout_change(struct wl_listener *listener, void *data)
 	if (server->wallpaper)
 		wm_wallpaper_reload(server->wallpaper);
 	wm_output_arrange_all(server);
+	wm_eis_layout_changed(server);
 
 	struct wm_view *view;
 	wl_list_for_each(view, &server->views, link) {

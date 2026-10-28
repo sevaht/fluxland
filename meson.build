@@ -161,6 +161,17 @@ if have_xwayland
   add_project_arguments('-DWM_HAS_XWAYLAND', language: 'c')
 endif
 
+# Input emulation for X11 programs: an EIS server for XWayland (libei)
+libeis_dep = dependency('libeis-1.0', required: get_option('libei'))
+have_eis = have_xwayland and libeis_dep.found() and cc.has_function(
+  'eis_backend_socket_get_client_pid', dependencies: libeis_dep)
+if get_option('libei').enabled() and not have_eis
+  error('libei support requested but XWayland or libeis (1.0+) is missing')
+endif
+if have_eis
+  add_project_arguments('-DWM_HAS_EIS', language: 'c')
+endif
+
 # System tray (StatusNotifierItem via sd-bus)
 sdbus_dep = dependency('libsystemd', required: false)
 if not sdbus_dep.found()
@@ -317,14 +328,19 @@ wm_sources = files(
   'src/validate.c',
   'src/wallpaper.c',
   'src/xwayland.c',
+  'src/eis.c',
 )
 
 if have_xwayland
   wm_deps += [xcb, xcb_ewmh, xcb_icccm]
 endif
 
+if have_eis
+  wm_deps += [libeis_dep]
+endif
+
 if have_systray
-  wm_sources += files('src/systray.c')
+  wm_sources += files('src/systray.c', 'src/systray_menu.c')
   wm_deps += [sdbus_dep]
 elif have_atspi
   # AT-SPI uses sd-bus but systray already added it if both are enabled

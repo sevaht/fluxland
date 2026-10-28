@@ -1221,6 +1221,8 @@ static void wm_drm_syncobj_init(struct wm_server *s) { (void)s; }
 static void wm_drm_syncobj_finish(struct wm_server *s) { (void)s; }
 static void wm_xwayland_init(struct wm_server *s) { (void)s; }
 static void wm_xwayland_finish(struct wm_server *s) { (void)s; }
+static void wm_eis_init(struct wm_server *s) { (void)s; }
+static void wm_eis_finish(struct wm_server *s) { (void)s; }
 static struct wm_wallpaper *wm_wallpaper_create(struct wm_server *s) { (void)s; return NULL; }
 static void wm_wallpaper_destroy(struct wm_wallpaper *wp) { (void)wp; }
 static void wm_wallpaper_reload(struct wm_wallpaper *wp) { (void)wp; }

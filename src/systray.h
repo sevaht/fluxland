@@ -37,6 +37,10 @@ struct wm_systray_item {
 	char *id;              /* application identifier */
 	int order;             /* systray.pinLeft (< 0) / pinRight (> 0) */
 	char *icon_name;       /* named icon (freedesktop) */
+	char *menu_path;       /* Menu property: its com.canonical.dbusmenu */
+	bool is_menu;          /* ItemIsMenu: it has a menu, no window */
+	char *title;           /* Title property, the tooltip's fallback */
+	char *tooltip;         /* ToolTip title and text, on one line */
 	cairo_surface_t *icon_pixmap; /* rendered icon surface */
 	struct wlr_scene_buffer *icon_buf;
 	struct wm_systray *systray;
@@ -54,6 +58,8 @@ struct wm_systray {
 	struct wlr_scene_tree *scene_tree;
 	sd_bus_slot *watcher_slot;
 	sd_bus_slot *name_slot;
+	sd_bus_slot *signal_slots[3]; /* NewIcon, NewToolTip, NewTitle */
+	struct wl_list menu_requests; /* menus being fetched (systray_menu.c) */
 	int icon_size;
 	int x, y, width, height;
 };
@@ -71,9 +77,22 @@ void wm_systray_layout(struct wm_systray *systray, int x, int y,
 /* Get the total width needed for all tray icons */
 int wm_systray_get_width(struct wm_systray *systray);
 
-/* Handle a click on the systray area; returns true if consumed */
+/*
+ * Handle a click at (local_x, local_y), relative to the tray's top left
+ * corner (where the systemtray tool is in the toolbar doesn't matter);
+ * returns true if it was on an icon
+ */
 bool wm_systray_handle_click(struct wm_systray *systray,
 	double local_x, double local_y, uint32_t button);
+
+/* Call a method (Activate, ContextMenu...) of a tray item, at (x, y) */
+void wm_systray_call_item_method(struct wm_systray *systray,
+	const char *bus_name, const char *object_path, const char *method,
+	int x, int y);
+
+/* The tooltip of the icon at layout coordinates (lx, ly), or NULL */
+const char *wm_systray_tooltip_at(struct wm_systray *systray, double lx,
+	double ly);
 
 #endif /* WM_HAS_SYSTRAY */
 #endif /* WM_SYSTRAY_H */

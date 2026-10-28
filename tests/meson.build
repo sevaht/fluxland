@@ -295,7 +295,7 @@ test_xwayland_logic = executable(
   'test_xwayland_logic',
   files('test_xwayland_logic.c'),
   include_directories: test_inc,
-  dependencies: [wlroots],
+  dependencies: [wlroots, pangocairo],
   install: false,
 )
 test('xwayland_logic', test_xwayland_logic)
@@ -379,6 +379,17 @@ if have_systray
     install: false,
   )
   test('systray', test_systray)
+
+  # systray_menu.c is #included, with the menu and server stood in for.
+  test_systray_menu = executable(
+    'test_systray_menu',
+    files('test_systray_menu.c'),
+    include_directories: test_inc,
+    dependencies: [wlroots, wayland_server, sdbus_dep],
+    c_args: ['-Wno-unused-parameter'],
+    install: false,
+  )
+  test('systray_menu', test_systray_menu)
 endif
 
 # --- test_main: main.c entry point integration tests ---
@@ -862,3 +873,17 @@ test('gesture', test_gesture)
 
 # --- Fuzz targets (requires -fsanitize=fuzzer support) ---
 subdir('fuzz')
+
+# --- test_eis: input emulation of X11 programs (an EIS server for XWayland) ---
+# eis.c is #included, with the server, config and menus stood in for.
+if have_eis
+  test_eis = executable(
+    'test_eis',
+    files('test_eis.c'),
+    include_directories: test_inc,
+    dependencies: [wlroots, wayland_server, libeis_dep, xcb],
+    c_args: ['-Wno-unused-parameter'],
+    install: false,
+  )
+  test('eis', test_eis)
+endif

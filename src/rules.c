@@ -182,9 +182,14 @@ wm_rules_apply(struct wm_rules *rules, struct wm_view *view)
 		view->icon_hidden = app->icon_hidden;
 	if (app->has_layer)
 		wm_view_set_layer(view, app->layer);
-	if (app->has_deco && view->decoration)
-		wm_decoration_set_preset(view->decoration, app->deco,
-			server->style);
+	if (app->has_deco) {
+		/* a frame asked for here beats what the window asked for */
+		if (app->deco != WM_DECOR_NONE)
+			wm_view_force_decoration(view);
+		if (view->decoration)
+			wm_decoration_set_preset(view->decoration, app->deco,
+				server->style);
+	}
 	if (app->has_focus_protection)
 		view->focus_protection = app->focus_protection;
 	if (app->has_alpha) {

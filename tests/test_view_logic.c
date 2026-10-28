@@ -704,6 +704,9 @@ struct wm_view {
 	char *role;
 	bool app_id_at_map;
 	bool no_decoration;
+	int deco_hint;
+	bool motif_buttons_set;
+	uint32_t motif_decor;
 	bool no_focus;
 	bool pending_maximize, pending_fullscreen, pending_minimize;
 	bool pending_maximize_horiz, pending_maximize_vert;
@@ -3059,6 +3062,54 @@ test_view_toggle_decoration_off(void)
 	test_views[0].decoration = NULL;
 	wl_list_remove(&test_views[0].link);
 	printf("  PASS: view_toggle_decoration_off\n");
+}
+
+/*
+ * A window that draws its own decorations (Discord) gets none of ours, and
+ * gets them when it stops: before it is shown that's only a flag; after, its
+ * frame is hidden or shown.
+ */
+static void
+test_view_set_client_decorated(void)
+{
+	/* Before it is shown: a flag */
+	init_test_server();
+	setup_mock_view(0, &test_workspace);
+	test_views[0].decoration = NULL;
+	test_views[0].no_decoration = false;
+	test_views[0].mapped = false;
+	wm_view_set_client_decorated(&test_views[0], true);
+	assert(test_views[0].no_decoration == true);
+	assert(test_views[0].decoration == NULL);
+	/* the same again changes nothing */
+	wm_view_set_client_decorated(&test_views[0], true);
+	assert(test_views[0].no_decoration == true);
+	wm_view_set_client_decorated(&test_views[0], false);
+	assert(test_views[0].no_decoration == false);
+	/* not shown yet: ours is made at the map, not now */
+	assert(test_views[0].decoration == NULL);
+	wm_view_set_client_decorated(NULL, true);
+	wl_list_remove(&test_views[0].link);
+
+	/* After it is shown: the frame goes, and comes back */
+	init_test_server();
+	setup_mock_view(0, &test_workspace);
+	setup_mock_decoration(&test_views[0]);
+	test_views[0].show_decoration = true;
+	test_views[0].no_decoration = false;
+	wm_view_set_client_decorated(&test_views[0], true);
+	assert(test_views[0].no_decoration == true);
+	assert(test_views[0].show_decoration == false);
+	assert(test_deco_tree.node.enabled == false);
+	wm_view_set_client_decorated(&test_views[0], false);
+	assert(test_views[0].no_decoration == false);
+	assert(test_views[0].show_decoration == true);
+	assert(test_deco_tree.node.enabled == true);
+
+	wl_list_remove(&test_deco_tree.node.link);
+	test_views[0].decoration = NULL;
+	wl_list_remove(&test_views[0].link);
+	printf("  PASS: view_set_client_decorated\n");
 }
 
 static void
@@ -5567,6 +5618,7 @@ main(void)
 
 	/* toggle decoration extended */
 	test_view_toggle_decoration_off();
+	test_view_set_client_decorated();
 	test_view_toggle_decoration_on();
 	test_view_toggle_decoration_double_toggle();
 	test_view_toggle_decoration_null_view();

@@ -22,6 +22,7 @@
 
 #ifdef WM_HAS_XWAYLAND
 
+#include <cairo.h>
 #include <stdlib.h>
 #include <string.h>
 #include <wlr/types/wlr_compositor.h>
@@ -29,11 +30,14 @@
 #include <wlr/types/wlr_output_layout.h>
 #include <wlr/types/wlr_scene.h>
 #include <wlr/types/wlr_seat.h>
+#include <wlr/types/wlr_xcursor_manager.h>
 #include <wlr/util/edges.h>
 #include <wlr/util/log.h>
+#include <xcb/xcb_ewmh.h>
 #include <xcb/xcb_icccm.h>
 
 #include "decoration.h"
+#include "icon.h"
 #include "server.h"
 #include "slit.h"
 #include "tabgroup.h"
@@ -63,6 +67,7 @@ struct wm_xwayland_view {
 	struct wl_listener set_class;
 	struct wl_listener set_role;
 	struct wl_listener set_hints;
+	struct wl_listener set_icon;
 	struct wl_listener set_override_redirect;
 };
 
@@ -84,6 +89,7 @@ struct wm_xwayland_unmanaged {
 	struct wl_list link; /* wm_server.xwayland_unmanaged */
 };
 
+static void update_icon(struct wm_xwayland_view *xview);
 static void create_managed(struct wm_server *server,
 	struct wlr_xwayland_surface *xsurface);
 static void create_unmanaged(struct wm_server *server,
@@ -131,6 +137,7 @@ resolve_atoms(xcb_connection_t *conn, struct wm_xwayland_atoms *atoms)
 		resolve_atom(conn, "_NET_WM_WINDOW_TYPE_TOOLTIP");
 	atoms->net_wm_window_type_notification =
 		resolve_atom(conn, "_NET_WM_WINDOW_TYPE_NOTIFICATION");
+	atoms->motif_wm_hints = resolve_atom(conn, "_MOTIF_WM_HINTS");
 	atoms->net_wm_window_type_dock =
 		resolve_atom(conn, "_NET_WM_WINDOW_TYPE_DOCK");
 	atoms->net_wm_window_type_desktop =
@@ -485,6 +492,42 @@ handle_commit(struct wl_listener *listener, void *data)
 		wm_cursor_rebase(view->server);
 }
 
+/*
+ * _MOTIF_WM_HINTS' decorations beyond what wlroots passes on (no title, no
+ * border): which buttons the window wants, as Fluxbox reads them.  Bits:
+ * all 1, border 2, resize handle 4, title 8, menu 16, minimize 32,
+ * maximize 64.
+ */
+static void
+read_motif_buttons(struct wm_view *view)
+{
+	struct wm_server *server = view->server;
+	view->motif_buttons_set = false;
+	xcb_connection_t *conn = server->xwayland ?
+		wlr_xwayland_get_xwm_connection(server->xwayland) : NULL;
+	xcb_atom_t atom = server->xwayland_atoms.motif_wm_hints;
+	if (!conn || atom == XCB_ATOM_NONE)
+		return;
+
+	xcb_get_property_cookie_t cookie = xcb_get_property(conn, 0,
+		view->xsurface->window_id, atom, XCB_GET_PROPERTY_TYPE_ANY,
+		0, 5);
+	xcb_get_property_reply_t *reply =
+		xcb_get_property_reply(conn, cookie, NULL);
+	if (!reply)
+		return;
+	/* flags, functions, decorations, input mode, status */
+	if (xcb_get_property_value_length(reply) >= 12) {
+		const uint32_t *v = xcb_get_property_value(reply);
+		bool has_decorations = v[0] & 2;
+		if (has_decorations && !(v[2] & 1)) {
+			view->motif_buttons_set = true;
+			view->motif_decor = v[2];
+		}
+	}
+	free(reply);
+}
+
 static void
 handle_map(struct wl_listener *listener, void *data)
 {
@@ -496,6 +539,7 @@ handle_map(struct wl_listener *listener, void *data)
 
 	refresh_metadata(xview);
 	update_urgency(view);
+	update_icon(xview);
 
 	enum wm_xw_window_class cls =
 		wm_xwayland_classify(xs, &server->xwayland_atoms);
@@ -511,12 +555,21 @@ handle_map(struct wl_listener *listener, void *data)
 		return;
 	}
 
-	/* Motif hints / window types that want no frame or focus */
-	view->no_decoration = (xs->decorations &
-		(WLR_XWAYLAND_SURFACE_DECORATIONS_NO_BORDER |
-		 WLR_XWAYLAND_SURFACE_DECORATIONS_NO_TITLE)) ||
+	/*
+	 * Motif hints say which parts it wants: neither a title nor a border
+	 * is no frame; no title only, a border; no border only, a title
+	 * (and window types that want no frame at all)
+	 */
+	bool no_title = xs->decorations &
+		WLR_XWAYLAND_SURFACE_DECORATIONS_NO_TITLE;
+	bool no_border = xs->decorations &
+		WLR_XWAYLAND_SURFACE_DECORATIONS_NO_BORDER;
+	view->no_decoration = (no_title && no_border) ||
 		cls == WM_XW_SPLASH || cls == WM_XW_POPUP ||
 		cls == WM_XW_DESKTOP;
+	view->deco_hint = no_title && !no_border ? WM_DECOR_BORDER :
+		no_border && !no_title ? WM_DECOR_TINY : WM_DECOR_NORMAL;
+	read_motif_buttons(view);
 	view->no_focus = cls == WM_XW_POPUP ||
 		wlr_xwayland_surface_icccm_input_model(xs) ==
 		WLR_ICCCM_INPUT_MODEL_NONE;
@@ -597,6 +650,21 @@ handle_unmap(struct wl_listener *listener, void *data)
 	xview->surface_tree = NULL;
 }
 
+/*
+ * Xwayland commits a window's first buffer as soon as the X window is
+ * mapped.  That can be before the window manager has read the window's
+ * properties and associated its surface with it, and wlroots doesn't map a
+ * surface that already had a buffer when it got its role: it would wait for
+ * the next commit, which a window that isn't redrawn (a dialog) never makes.
+ * The window stays unmapped, invisible, and its application waits on it.
+ */
+static void
+map_if_already_committed(struct wlr_surface *surface)
+{
+	if (!surface->mapped && wlr_surface_has_buffer(surface))
+		wlr_surface_map(surface);
+}
+
 static void
 handle_associate(struct wl_listener *listener, void *data)
 {
@@ -608,6 +676,7 @@ handle_associate(struct wl_listener *listener, void *data)
 	wl_signal_add(&xs->surface->events.map, &xview->map);
 	xview->unmap.notify = handle_unmap;
 	wl_signal_add(&xs->surface->events.unmap, &xview->unmap);
+	map_if_already_committed(xs->surface);
 }
 
 static void
@@ -643,6 +712,7 @@ destroy_managed(struct wm_xwayland_view *xview)
 	wl_list_remove(&xview->set_class.link);
 	wl_list_remove(&xview->set_role.link);
 	wl_list_remove(&xview->set_hints.link);
+	wl_list_remove(&xview->set_icon.link);
 	wl_list_remove(&xview->set_override_redirect.link);
 
 	view->xsurface->data = NULL;
@@ -830,6 +900,83 @@ handle_set_role(struct wl_listener *listener, void *data)
 		strdup(view->xsurface->role) : NULL;
 }
 
+/*
+ * _NET_WM_ICON: the picture nearest WM_ICON_SIZE that covers it (else the
+ * largest) becomes the window's own icon, like a Wayland client's
+ * xdg-toplevel-icon.  The pixels are ARGB, not premultiplied.
+ */
+static void
+update_icon(struct wm_xwayland_view *xview)
+{
+	struct wm_view *view = &xview->view;
+	xcb_ewmh_get_wm_icon_reply_t reply;
+	if (!wlr_xwayland_surface_fetch_icon(view->xsurface, &reply))
+		return;
+
+	const uint32_t *best = NULL;
+	uint32_t best_w = 0, best_h = 0;
+	xcb_ewmh_wm_icon_iterator_t it = xcb_ewmh_get_wm_icon_iterator(&reply);
+	for (; it.rem; xcb_ewmh_get_wm_icon_next(&it)) {
+		uint32_t w = it.width, h = it.height;
+		if (w == 0 || h == 0 || w > 1024 || h > 1024)
+			continue;
+		bool covers = w >= WM_ICON_SIZE && h >= WM_ICON_SIZE;
+		bool best_covers = best_w >= WM_ICON_SIZE &&
+			best_h >= WM_ICON_SIZE;
+		if (!best ||
+		    (covers && (!best_covers || w * h < best_w * best_h)) ||
+		    (!covers && !best_covers && w * h > best_w * best_h)) {
+			best = it.data;
+			best_w = w;
+			best_h = h;
+		}
+	}
+
+	cairo_surface_t *icon = NULL;
+	if (best) {
+		cairo_surface_t *src = cairo_image_surface_create(
+			CAIRO_FORMAT_ARGB32, (int)best_w, (int)best_h);
+		if (cairo_surface_status(src) == CAIRO_STATUS_SUCCESS) {
+			cairo_surface_flush(src);
+			unsigned char *dst = cairo_image_surface_get_data(src);
+			int stride = cairo_image_surface_get_stride(src);
+			for (uint32_t y = 0; y < best_h; y++) {
+				uint32_t *row = (uint32_t *)(dst +
+					(size_t)y * stride);
+				for (uint32_t x = 0; x < best_w; x++) {
+					uint32_t px = best[y * best_w + x];
+					uint32_t a = px >> 24;
+					uint32_t r = (((px >> 16) & 0xff) * a +
+						127) / 255;
+					uint32_t g = (((px >> 8) & 0xff) * a +
+						127) / 255;
+					uint32_t b = ((px & 0xff) * a + 127) /
+						255;
+					row[x] = (a << 24) | (r << 16) |
+						(g << 8) | b;
+				}
+			}
+			cairo_surface_mark_dirty(src);
+			icon = wm_icon_scale(src, WM_ICON_SIZE);
+		}
+		cairo_surface_destroy(src);
+	}
+	xcb_ewmh_get_wm_icon_reply_wipe(&reply);
+
+	if (icon) {
+		wm_view_set_icon(view, icon, true);
+		cairo_surface_destroy(icon);
+	}
+}
+
+static void
+handle_set_icon(struct wl_listener *listener, void *data)
+{
+	struct wm_xwayland_view *xview =
+		wl_container_of(listener, xview, set_icon);
+	update_icon(xview);
+}
+
 static void
 handle_set_hints(struct wl_listener *listener, void *data)
 {
@@ -913,6 +1060,8 @@ create_managed(struct wm_server *server,
 	wl_signal_add(&xsurface->events.set_role, &xview->set_role);
 	xview->set_hints.notify = handle_set_hints;
 	wl_signal_add(&xsurface->events.set_hints, &xview->set_hints);
+	xview->set_icon.notify = handle_set_icon;
+	wl_signal_add(&xsurface->events.set_icon, &xview->set_icon);
 	xview->set_override_redirect.notify =
 		handle_managed_set_override_redirect;
 	wl_signal_add(&xsurface->events.set_override_redirect,
@@ -997,6 +1146,7 @@ handle_unmanaged_associate(struct wl_listener *listener, void *data)
 	wl_signal_add(&u->xsurface->surface->events.map, &u->map);
 	u->unmap.notify = handle_unmanaged_unmap;
 	wl_signal_add(&u->xsurface->surface->events.unmap, &u->unmap);
+	map_if_already_committed(u->xsurface->surface);
 }
 
 static void
@@ -1149,6 +1299,26 @@ handle_xwayland_ready(struct wl_listener *listener, void *data)
 
 	/* Set the XWayland cursor */
 	wlr_xwayland_set_seat(server->xwayland, server->seat);
+
+	/*
+	 * The cursor over X11 windows that set none of their own (Tk's,
+	 * for one); without an image Xwayland shows them a blank one.
+	 */
+	struct wlr_xcursor *xcursor = wlr_xcursor_manager_get_xcursor(
+		server->cursor_mgr, "default", 1);
+	if (!xcursor) {
+		wlr_xcursor_manager_load(server->cursor_mgr, 1);
+		xcursor = wlr_xcursor_manager_get_xcursor(server->cursor_mgr,
+			"default", 1);
+	}
+	if (xcursor && xcursor->image_count > 0) {
+		struct wlr_xcursor_image *image = xcursor->images[0];
+		struct wlr_buffer *buffer = wlr_xcursor_image_get_buffer(image);
+		if (buffer)
+			wlr_xwayland_set_cursor(server->xwayland, buffer,
+				(int32_t)image->hotspot_x,
+				(int32_t)image->hotspot_y);
+	}
 
 	wlr_log(WLR_INFO, "xwayland ready on DISPLAY=%s",
 		server->xwayland->display_name);

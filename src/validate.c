@@ -164,6 +164,10 @@ strip(char *s)
 /* ---- Init file validation ---- */
 
 /* Valid focus model values */
+static const char *valid_eis_policies[] = {
+	"ask", "allow", "deny", NULL
+};
+
 static const char *valid_focus_models[] = {
 	"MouseFocus", "ClickToFocus", "ClickFocus",
 	"StrictMouseFocus", NULL
@@ -431,6 +435,9 @@ static const struct init_key_spec init_keys[] = {
 	{"session.screen0.toolbar.button.*", VT_STRING, 0, 0, NULL},
 	{"session.screen0.systray.pinLeft", VT_STRING, 0, 0, NULL},
 	{"session.screen0.systray.pinRight", VT_STRING, 0, 0, NULL},
+	{"session.xwayland.inputEmulation", VT_ENUM, 0, 0, valid_eis_policies},
+	{"session.xwayland.inputEmulation.allow", VT_STRING, 0, 0, NULL},
+	{"session.xwayland.inputEmulation.deny", VT_STRING, 0, 0, NULL},
 	{"session.screen0.slit.autoRaise", VT_BOOL, 0, 0, NULL},
 	{"session.screen0.workspacewarpinghorizontal", VT_BOOL, 0, 0, NULL},
 	{"session.screen0.workspacewarpingvertical", VT_BOOL, 0, 0, NULL},

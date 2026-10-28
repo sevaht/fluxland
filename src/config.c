@@ -1074,6 +1074,23 @@ apply_tab_config(struct wm_config *config, struct rc_database *db)
 	config->systray_pin_left = pins ? strdup(pins) : NULL;
 	pins = rc_get_string(db, "session.screen0.systray.pinRight");
 	config->systray_pin_right = pins ? strdup(pins) : NULL;
+	{
+		const char *mode = rc_get_string(db,
+			"session.xwayland.inputEmulation");
+		config->eis_policy = WM_EIS_ASK;
+		if (mode && !strcasecmp(mode, "allow"))
+			config->eis_policy = WM_EIS_ALLOW;
+		else if (mode && !strcasecmp(mode, "deny"))
+			config->eis_policy = WM_EIS_DENY;
+		free(config->eis_allow);
+		free(config->eis_deny);
+		const char *names = rc_get_string(db,
+			"session.xwayland.inputEmulation.allow");
+		config->eis_allow = names ? strdup(names) : NULL;
+		names = rc_get_string(db,
+			"session.xwayland.inputEmulation.deny");
+		config->eis_deny = names ? strdup(names) : NULL;
+	}
 	config->tab_placement = parse_tab_placement(
 		rc_get_string(db, "session.screen0.tab.placement"));
 	config->tab_width =
@@ -1941,6 +1958,8 @@ config_destroy(struct wm_config *config)
 	free(config->default_deco);
 	free(config->systray_pin_left);
 	free(config->systray_pin_right);
+	free(config->eis_allow);
+	free(config->eis_deny);
 	free(config->window_menu_file);
 	free(config->iconbar_iconified_pattern);
 	free(config->iconbar_mode_spec);

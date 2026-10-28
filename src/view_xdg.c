@@ -371,6 +371,16 @@ handle_new_xdg_toplevel(struct wl_listener *listener, void *data)
 		return;
 	}
 
+	/*
+	 * xdg-decoration: "If compositor and client do not negotiate the use
+	 * of a server-side decoration using this protocol, clients continue to
+	 * self-decorate as they see fit."  So a window that never uses it gets
+	 * no frame of ours (a GTK3 window would have two); one that does, and
+	 * wants ours (or has no preference), gets it when its decoration object
+	 * is made.
+	 */
+	view->no_decoration = true;
+
 	/* Attach the XDG surface to the scene tree */
 	struct wlr_scene_tree *surface_tree =
 		wlr_scene_xdg_surface_create(view->scene_tree,

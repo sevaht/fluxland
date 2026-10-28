@@ -1137,6 +1137,10 @@ static int g_scene_node_destroy_count;
 
 /* --- Stub wlroots functions used by cursor.c --- */
 
+/* What is under the cursor: nothing, unless a test puts something there */
+static struct wlr_scene_node *g_node_at;
+static struct wlr_scene_surface *g_scene_surface;
+
 static struct wlr_scene_node *
 wlr_scene_node_at(struct wlr_scene_node *node, double lx, double ly,
 	double *sx, double *sy)
@@ -1144,7 +1148,7 @@ wlr_scene_node_at(struct wlr_scene_node *node, double lx, double ly,
 	(void)node; (void)lx; (void)ly;
 	if (sx) *sx = 0;
 	if (sy) *sy = 0;
-	return NULL;
+	return g_node_at;
 }
 
 static struct wlr_scene_buffer *
@@ -1157,7 +1161,7 @@ static struct wlr_scene_surface *
 wlr_scene_surface_try_from_buffer(struct wlr_scene_buffer *buffer)
 {
 	(void)buffer;
-	return NULL;
+	return g_scene_surface;
 }
 
 static void
@@ -3450,6 +3454,41 @@ test_get_cursor_context_desktop(void)
 }
 
 /*
+ * A surface that belongs to no managed window (an X11 popup menu, an xdg
+ * popup, a layer-shell panel) is the application's: no desktop binding
+ * (OnDesktop Mouse1 :HideMenus) is for it.  A buffer that is no surface (the
+ * wallpaper) is still the desktop.
+ */
+static void
+test_get_cursor_context_popup_surface(void)
+{
+	setup();
+	test_cursor.x = 500;
+	test_cursor.y = 400;
+
+	struct wlr_surface popup = {0};
+	struct wlr_scene_buffer buffer = {0};
+	buffer.node.type = WLR_SCENE_NODE_BUFFER;
+	struct wlr_scene_surface scene_surface = { .surface = &popup };
+	g_node_at = &buffer.node;
+	g_scene_surface = &scene_surface;
+
+	struct wm_view *view = (struct wm_view *)&buffer;
+	uint32_t ctx = get_cursor_context(&test_server, &view);
+	assert(ctx == 0);
+	assert(view == NULL);
+
+	/* a buffer of no surface: the desktop */
+	g_scene_surface = NULL;
+	view = NULL;
+	ctx = get_cursor_context(&test_server, &view);
+	assert(ctx == (WM_MOUSE_CTX_GLOBAL | WM_MOUSE_CTX_DESKTOP));
+
+	g_node_at = NULL;
+	printf("  PASS: get_cursor_context_popup_surface\n");
+}
+
+/*
  * Test 77: get_cursor_context returns SLIT when cursor over slit.
  */
 static void
@@ -4008,6 +4047,7 @@ main(void)
 	test_get_cursor_context_desktop();
 	test_get_cursor_context_slit();
 	test_get_cursor_context_slit_hidden();
+	test_get_cursor_context_popup_surface();
 	test_get_cursor_context_slit_outside();
 
 	/* passthrough motion tests */

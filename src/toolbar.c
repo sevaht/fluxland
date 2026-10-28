@@ -1540,6 +1540,14 @@ wm_toolbar_update_iconbar(struct wm_toolbar *toolbar)
 		/* Collect entries and check if anything changed */
 		collect_iconbar_entries(toolbar);
 		if (iconbar_entries_match_cache(toolbar)) {
+			/*
+			 * Collecting cleared what the last render found out
+			 * (which titles didn't fit, for the tooltip), and
+			 * nothing changed to render it again
+			 */
+			for (int i = 0; i < toolbar->ib_count; i++)
+				toolbar->ib_entries[i].truncated =
+					toolbar->ib_cached_entries[i].truncated;
 			return;
 		}
 

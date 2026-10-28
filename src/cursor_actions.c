@@ -142,6 +142,16 @@ get_cursor_context(struct wm_server *server, struct wm_view **out_view)
 		*out_view = view;
 
 	if (!view) {
+		/*
+		 * A surface that belongs to no managed window (a popup menu
+		 * of an X11 or xdg application, a layer-shell panel) is the
+		 * application's, not the desktop's: no binding is for it
+		 * (OnDesktop Mouse1 :HideMenus must not eat the click on its
+		 * menu entry, nor the wheel switch workspaces over it)
+		 */
+		if (surface)
+			return 0;
+
 		/* Check if cursor is over the slit */
 		if (server->slit && server->slit->visible &&
 		    !server->slit->hidden) {

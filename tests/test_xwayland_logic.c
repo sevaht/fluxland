@@ -15,6 +15,7 @@
 #define WM_HAS_XWAYLAND
 
 #include <assert.h>
+#include <cairo.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -41,6 +42,9 @@
 #define WLR_XWAYLAND_XWAYLAND_H
 #define __XCB_H__
 #define __XCB_ICCCM_H__
+#define __XCB_EWMH_H__
+#define WLR_TYPES_WLR_XCURSOR_MANAGER_H
+#define WM_ICON_H
 #define WM_DECORATION_H
 #define WM_SERVER_H
 #define WM_SLIT_H
@@ -330,6 +334,7 @@ struct wlr_xwayland_surface {
 		struct wl_signal set_class;
 		struct wl_signal set_role;
 		struct wl_signal set_hints;
+		struct wl_signal set_icon;
 		struct wl_signal set_override_redirect;
 		struct wl_signal set_geometry;
 	} events;
@@ -378,9 +383,66 @@ wlr_xwayland_create(struct wl_display *d, void *c, bool lazy)
 static void wlr_xwayland_destroy(struct wlr_xwayland *x) { (void)x; }
 static void wlr_xwayland_set_seat(struct wlr_xwayland *x, struct wlr_seat *s)
 	{ (void)x; (void)s; }
+static xcb_connection_t *g_xwm_conn;	/* NULL: no property can be read */
 static xcb_connection_t *
 wlr_xwayland_get_xwm_connection(struct wlr_xwayland *x)
-	{ (void)x; return NULL; }
+	{ (void)x; return g_xwm_conn; }
+
+/* Whether the surface got a buffer before it was associated */
+static bool g_surface_has_buffer;
+static bool wlr_surface_has_buffer(struct wlr_surface *surface)
+	{ (void)surface; return g_surface_has_buffer; }
+static void wlr_surface_map(struct wlr_surface *surface)
+{
+	if (surface->mapped)
+		return;
+	surface->mapped = true;
+	wl_signal_emit(&surface->events.map, NULL);
+}
+
+/* _NET_WM_ICON: no window has one here */
+typedef struct { uint32_t *data; } xcb_ewmh_get_wm_icon_reply_t;
+typedef struct {
+	uint32_t width, height;
+	uint32_t *data;
+	unsigned int rem, index;
+} xcb_ewmh_wm_icon_iterator_t;
+static xcb_ewmh_wm_icon_iterator_t
+xcb_ewmh_get_wm_icon_iterator(const xcb_ewmh_get_wm_icon_reply_t *r)
+	{ xcb_ewmh_wm_icon_iterator_t it = { 0 }; (void)r; return it; }
+static void xcb_ewmh_get_wm_icon_next(xcb_ewmh_wm_icon_iterator_t *it)
+	{ (void)it; }
+static void xcb_ewmh_get_wm_icon_reply_wipe(xcb_ewmh_get_wm_icon_reply_t *r)
+	{ (void)r; }
+static bool
+wlr_xwayland_surface_fetch_icon(const struct wlr_xwayland_surface *xs,
+	xcb_ewmh_get_wm_icon_reply_t *r)
+	{ (void)xs; (void)r; return false; }
+
+/* The default cursor of X11 windows */
+struct wlr_buffer;
+struct wlr_xcursor_manager;
+struct wlr_xcursor_image {
+	uint32_t width, height, hotspot_x, hotspot_y;
+};
+struct wlr_xcursor {
+	unsigned int image_count;
+	struct wlr_xcursor_image **images;
+};
+static struct wlr_xcursor *
+wlr_xcursor_manager_get_xcursor(struct wlr_xcursor_manager *m,
+	const char *name, float scale)
+	{ (void)m; (void)name; (void)scale; return NULL; }
+static bool wlr_xcursor_manager_load(struct wlr_xcursor_manager *m,
+	float scale)
+	{ (void)m; (void)scale; return true; }
+static struct wlr_buffer *
+wlr_xcursor_image_get_buffer(struct wlr_xcursor_image *image)
+	{ (void)image; return NULL; }
+static void
+wlr_xwayland_set_cursor(struct wlr_xwayland *x, struct wlr_buffer *b,
+	int32_t hotspot_x, int32_t hotspot_y)
+	{ (void)x; (void)b; (void)hotspot_x; (void)hotspot_y; }
 
 static void
 wlr_xwayland_surface_configure(struct wlr_xwayland_surface *xs,
@@ -608,6 +670,9 @@ struct wm_view {
 	bool maximized, fullscreen, sticky;
 	bool mapped, docked, urgent;
 	bool no_decoration, no_focus, focus_hidden, icon_hidden;
+	int deco_hint;
+	bool motif_buttons_set;
+	uint32_t motif_decor;
 	enum wm_view_layer layer;
 	char *title, *app_id, *instance, *role;
 	struct wm_decoration *decoration;
@@ -627,6 +692,12 @@ struct wm_xwayland_atoms {
 	xcb_atom_t net_wm_window_type_notification;
 	xcb_atom_t net_wm_window_type_dock;
 	xcb_atom_t net_wm_window_type_desktop;
+	xcb_atom_t motif_wm_hints;
+};
+
+enum wm_decor_preset {
+	WM_DECOR_NORMAL, WM_DECOR_NONE, WM_DECOR_BORDER, WM_DECOR_TAB,
+	WM_DECOR_TINY, WM_DECOR_TOOL,
 };
 
 enum wm_xw_window_class {
@@ -647,6 +718,7 @@ struct wm_server {
 	struct wl_display *wl_display;
 	void *compositor;
 	struct wlr_seat *seat;
+	struct wlr_xcursor_manager *cursor_mgr;
 	struct wm_view *focused_view;
 	struct wl_list views;
 	struct wl_list xwayland_unmanaged;
@@ -687,6 +759,13 @@ static enum wm_cursor_mode g_interactive_mode;
 static uint32_t g_interactive_edges;
 static int g_slit_add_count;
 static int g_refresh_geometry_count;
+#define WM_ICON_SIZE 32
+static cairo_surface_t *wm_icon_scale(cairo_surface_t *src, int size)
+	{ (void)src; (void)size; return NULL; }
+static void wm_view_set_icon(struct wm_view *view, struct _cairo_surface *icon,
+	bool from_client)
+	{ (void)view; (void)icon; (void)from_client; }
+
 static int g_iconbar_count;
 
 bool
@@ -941,6 +1020,7 @@ reset(void)
 	g_iconbar_count = 0;
 	g_kb_enter_surface = NULL;
 	g_kb_clear_count = 0;
+	g_surface_has_buffer = false;
 }
 
 struct fake_x11 {
@@ -974,6 +1054,7 @@ fake_init(struct fake_x11 *f, bool override_redirect)
 	wl_signal_init(&f->xs.events.set_class);
 	wl_signal_init(&f->xs.events.set_role);
 	wl_signal_init(&f->xs.events.set_hints);
+	wl_signal_init(&f->xs.events.set_icon);
 	wl_signal_init(&f->xs.events.set_override_redirect);
 	wl_signal_init(&f->xs.events.set_geometry);
 	wl_signal_init(&f->surface.events.map);
@@ -1199,7 +1280,8 @@ test_map_motif_and_input_model(void)
 	reset();
 	struct fake_x11 f;
 	fake_init(&f, false);
-	f.xs.decorations = WLR_XWAYLAND_SURFACE_DECORATIONS_NO_TITLE;
+	f.xs.decorations = WLR_XWAYLAND_SURFACE_DECORATIONS_NO_TITLE |
+		WLR_XWAYLAND_SURFACE_DECORATIONS_NO_BORDER;
 	f.xs.input_model = WLR_ICCCM_INPUT_MODEL_NONE;
 	fake_create(&f);
 	fake_map(&f);
@@ -1209,6 +1291,105 @@ test_map_motif_and_input_model(void)
 	fake_unmap(&f);
 	fake_destroy(&f);
 	printf("  PASS: map_motif_and_input_model\n");
+}
+
+/*
+ * Motif's decorations name the parts it wants: no title and no border is no
+ * frame; no title only, a border; no border only, a title.
+ */
+static void
+test_map_motif_partial_frames(void)
+{
+	static const struct {
+		uint32_t bits;
+		bool none;
+		int hint;
+	} cases[] = {
+		{ 0, false, WM_DECOR_NORMAL },
+		{ WLR_XWAYLAND_SURFACE_DECORATIONS_NO_TITLE, false,
+			WM_DECOR_BORDER },
+		{ WLR_XWAYLAND_SURFACE_DECORATIONS_NO_BORDER, false,
+			WM_DECOR_TINY },
+		{ WLR_XWAYLAND_SURFACE_DECORATIONS_NO_TITLE |
+		  WLR_XWAYLAND_SURFACE_DECORATIONS_NO_BORDER, true,
+			WM_DECOR_NORMAL },
+	};
+	for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+		reset();
+		struct fake_x11 f;
+		fake_init(&f, false);
+		f.xs.decorations = cases[i].bits;
+		fake_create(&f);
+		fake_map(&f);
+		struct wm_view *v = view_of(&f);
+		assert(v->no_decoration == cases[i].none);
+		if (!cases[i].none)
+			assert(v->deco_hint == cases[i].hint);
+		fake_unmap(&f);
+		fake_destroy(&f);
+	}
+	printf("  PASS: map_motif_partial_frames\n");
+}
+
+/*
+ * The buttons Motif's decorations ask for (minimize 32, maximize 64, menu
+ * 16): read at the map, from _MOTIF_WM_HINTS.
+ */
+static void
+test_map_motif_buttons(void)
+{
+	static xcb_connection_t *conn_token = (xcb_connection_t *)&conn_token;
+	static struct wlr_xwayland fake_xwayland;
+	g_xwm_conn = conn_token;
+
+	/* flags, functions, decorations, input mode, status */
+	uint32_t title_only[5] = { 2, 0, 8, 0, 0 };
+	uint32_t with_min[5] = { 2, 0, 8 | 32, 0, 0 };
+	uint32_t all[5] = { 2, 0, 1, 0, 0 };
+	uint32_t no_decor_flag[5] = { 1, 0, 8, 0, 0 };
+	const struct {
+		uint32_t *prop;
+		bool set;
+		uint32_t decor;
+	} cases[] = {
+		{ title_only, true, 8 },
+		{ with_min, true, 8 | 32 },
+		{ all, false, 0 },		/* everything: nothing to drop */
+		{ no_decor_flag, false, 0 },	/* it says nothing of them */
+	};
+	for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+		reset();
+		server.xwayland = &fake_xwayland;
+		server.xwayland_atoms.motif_wm_hints = 77;
+		memcpy(g_xprop_value, cases[i].prop, 20);
+		g_xprop_len = 20;
+		struct fake_x11 f;
+		fake_init(&f, false);
+		fake_create(&f);
+		fake_map(&f);
+		struct wm_view *v = view_of(&f);
+		assert(v->motif_buttons_set == cases[i].set);
+		if (cases[i].set)
+			assert(v->motif_decor == cases[i].decor);
+		fake_unmap(&f);
+		fake_destroy(&f);
+	}
+
+	/* No property at all */
+	reset();
+	server.xwayland = &fake_xwayland;
+	server.xwayland_atoms.motif_wm_hints = 77;
+	g_xprop_len = -1;
+	struct fake_x11 f;
+	fake_init(&f, false);
+	fake_create(&f);
+	fake_map(&f);
+	assert(!view_of(&f)->motif_buttons_set);
+	fake_unmap(&f);
+	fake_destroy(&f);
+
+	g_xwm_conn = NULL;
+	printf("  PASS: map_motif_buttons\n");
 }
 
 static void
@@ -1241,6 +1422,73 @@ test_map_dockapps_go_to_slit(void)
 	fake_unmap(&dock);
 	fake_destroy(&dock);
 	printf("  PASS: map_dockapps_go_to_slit\n");
+}
+
+/*
+ * Xwayland commits a window's first buffer when the X window is mapped,
+ * which can be before the surface is associated; wlroots then never maps
+ * it, and a window that isn't redrawn (a dialog) stays invisible.
+ */
+static void
+test_associate_after_commit_maps(void)
+{
+	reset();
+	struct fake_x11 f;
+	fake_init(&f, false);
+	f.xs.title = "Quit";
+	f.xs.class = "Toplevel";
+	g_surface_has_buffer = true;
+	fake_create(&f);
+
+	/* No map event came from wlroots: associating mapped it */
+	assert(f.surface.mapped);
+	assert(g_map_common_count == 1);
+	assert(view_of(&f)->mapped);
+
+	fake_unmap(&f);
+	assert(g_unmap_common_count == 1);
+	fake_destroy(&f);
+	printf("  PASS: associate_after_commit_maps\n");
+}
+
+static void
+test_associate_without_buffer_waits(void)
+{
+	reset();
+	struct fake_x11 f;
+	fake_init(&f, false);
+	f.xs.title = "Terminal";
+	fake_create(&f);
+
+	/* Nothing to show yet: it waits for the surface's own map */
+	assert(!f.surface.mapped);
+	assert(g_map_common_count == 0);
+	assert(!view_of(&f)->mapped);
+
+	fake_map(&f);
+	assert(g_map_common_count == 1);
+	assert(view_of(&f)->mapped);
+
+	fake_unmap(&f);
+	fake_destroy(&f);
+	printf("  PASS: associate_without_buffer_waits\n");
+}
+
+static void
+test_unmanaged_associate_after_commit_maps(void)
+{
+	reset();
+	struct fake_x11 f;
+	fake_init(&f, true);
+	g_surface_has_buffer = true;
+	fake_create(&f);
+
+	/* An X11 popup menu or tooltip the same way */
+	assert(f.surface.mapped);
+
+	fake_unmap(&f);
+	fake_destroy(&f);
+	printf("  PASS: unmanaged_associate_after_commit_maps\n");
 }
 
 static void
@@ -1671,8 +1919,13 @@ main(void)
 	test_map_keeps_client_position();
 	test_map_window_types();
 	test_map_motif_and_input_model();
+	test_map_motif_partial_frames();
+	test_map_motif_buttons();
 	test_map_dockapps_go_to_slit();
 	test_unmap_and_remap();
+	test_associate_after_commit_maps();
+	test_associate_without_buffer_waits();
+	test_unmanaged_associate_after_commit_maps();
 	test_configure_before_map();
 	test_configure_mapped();
 	test_requests();

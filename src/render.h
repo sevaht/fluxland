@@ -132,6 +132,10 @@ void wm_render_cleanup(void);
 void wm_cut_corners(cairo_surface_t *surface, int x, int y, int frame_w,
 	int frame_h, uint8_t corners);
 
+/* Whether those corners cut away pixel (px, py) of a frame_w x frame_h frame */
+bool wm_corner_cut_at(int frame_w, int frame_h, uint8_t corners, int px,
+	int py);
+
 void wm_render_rounded_rect_path(cairo_t *cr, double x, double y,
 	double width, double height, double radius, uint8_t corners);
 

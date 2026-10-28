@@ -572,6 +572,8 @@ static int g_toolbar_relayout_count, g_slit_reconfigure_count;
 static void
 wm_toolbar_relayout(struct wm_toolbar *t)
 { (void)t; g_toolbar_relayout_count++; }
+struct wm_server;
+static void wm_eis_layout_changed(struct wm_server *server) { (void)server; }
 static int g_wallpaper_reloads;
 struct wm_wallpaper;
 static void wm_wallpaper_reload(struct wm_wallpaper *wp)

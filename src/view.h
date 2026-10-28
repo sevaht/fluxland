@@ -116,6 +116,13 @@ struct wm_view {
 
 	/* Window-type hints from the backend (e.g. X11 splash/tooltip) */
 	bool no_decoration;
+	/* A frame of less than all, which the window asked for (0: all):
+	 * enum wm_decor_preset, Motif's "no title" or "no border" */
+	int deco_hint;
+	/* The Motif decoration bits it asked for, when not "all" (the buttons
+	 * it wants: minimize, maximize, menu) */
+	bool motif_buttons_set;
+	uint32_t motif_decor;
 	bool no_focus;
 	/* Set by window rules before the window is shown; realized at map */
 	bool pending_maximize, pending_fullscreen, pending_minimize;
@@ -341,6 +348,15 @@ void wm_view_free_props(struct wm_view *view);
 
 /* Make the window's server-side decoration if it has none (map does) */
 void wm_view_ensure_decoration(struct wm_view *view);
+
+/* A window that draws its own decorations gets none of ours */
+void wm_view_set_client_decorated(struct wm_view *view, bool client_side);
+
+/*
+ * An explicit wish for a frame (a [Deco] rule, ToggleDecor): the window gets
+ * one whatever it asked for
+ */
+void wm_view_force_decoration(struct wm_view *view);
 
 /*
  * The client size for the first configure of a window that asked to

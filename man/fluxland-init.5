@@ -314,6 +314,27 @@ menu.
 .B session.screen0.toolbar.maxOver
 Allow maximized windows to cover the toolbar (default: false).
 .TP
+.B session.xwayland.inputEmulation
+Whether X11 programs may move the pointer and press buttons and keys through
+the XTest extension (Steam Input's desktop controls, xdotool, remote
+desktop servers).  XWayland would otherwise keep it to itself, as the
+compositor never sees it.
+.B ask
+(the default) shows a menu the first time a program does: Allow (until
+fluxland exits), Always allow (adds the program to
+.BR session.xwayland.inputEmulation.allow ),
+or Deny (closing the menu is a deny).
+.B allow
+lets any program, as Xorg does;
+.B deny
+none that is not in the allow list.
+Needs libei when fluxland is built.
+.TP
+.BR session.xwayland.inputEmulation.allow ", " session.xwayland.inputEmulation.deny
+Programs, by the name XWayland gives them (the command, such as
+.BR steam ),
+separated by spaces or commas, that may or may not do it without asking.
+.TP
 .BR session.screen0.systray.pinLeft ", " session.screen0.systray.pinRight
 Tray icons to keep at the left or right of the system tray, by their
 id, separated by spaces or commas: the first of pinLeft leftmost, the

@@ -46,6 +46,7 @@
 
 /* Forward declarations for types defined by other modules */
 struct wm_view;
+struct wm_eis;
 struct wm_workspace;
 struct wm_config;
 struct wm_style;
@@ -458,6 +459,8 @@ struct wm_server {
 	struct wm_menu *custom_menu;
 	struct wm_dialog *dialog;	/* CommandDialog... while open */
 	struct wm_tooltip *tooltip;	/* tooltipDelay's window */
+
+	struct wm_eis *eis;	/* XTest input of X11 programs */
 
 #ifdef WM_HAS_XWAYLAND
 	/* XWayland bridge */

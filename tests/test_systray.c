@@ -38,6 +38,7 @@
 #define WLR_UTIL_BOX_H
 #define WM_SERVER_H
 #define WM_TOOLBAR_H
+#define WM_SYSTRAY_MENU_H
 #define WM_SYSTRAY_H
 #define DRM_FOURCC_H
 #define CAIRO_H
@@ -263,6 +264,12 @@ cairo_surface_status(cairo_surface_t *s)
 
 static void
 cairo_surface_flush(cairo_surface_t *s)
+{
+	(void)s;
+}
+
+static void
+cairo_surface_mark_dirty(cairo_surface_t *s)
 {
 	(void)s;
 }
@@ -524,7 +531,7 @@ int sd_bus_message_read(sd_bus_message *m, const char *types, ...)
 		*p3 = g_sdbus_read_str3;
 	} else if (strcmp(types, "v") == 0) {
 		const char *vtype = va_arg(ap, const char *);
-		if (strcmp(vtype, "s") == 0) {
+		if (strcmp(vtype, "s") == 0 || strcmp(vtype, "o") == 0) {
 			const char **p = va_arg(ap, const char **);
 			*p = g_sdbus_read_str1;
 		}
@@ -644,6 +651,10 @@ struct wm_systray_item {
 	char *id;
 	int order;
 	char *icon_name;
+	char *menu_path;
+	bool is_menu;
+	char *title;
+	char *tooltip;
 	cairo_surface_t *icon_pixmap;
 	struct wlr_scene_buffer *icon_buf;
 	struct wm_systray *systray;
@@ -659,6 +670,8 @@ struct wm_systray {
 	struct wlr_scene_tree *scene_tree;
 	sd_bus_slot *watcher_slot;
 	sd_bus_slot *name_slot;
+	sd_bus_slot *signal_slots[3];
+	struct wl_list menu_requests;
 	int icon_size;
 	int x, y, width, height;
 	bool vertical;
@@ -672,9 +685,34 @@ void wm_systray_layout(struct wm_systray *systray, int x, int y,
 int wm_systray_get_width(struct wm_systray *systray);
 bool wm_systray_handle_click(struct wm_systray *systray,
 	double local_x, double local_y, uint32_t button);
+const char *wm_systray_tooltip_at(struct wm_systray *systray, double lx,
+	double ly);
 
 /* --- Include systray.c source directly --- */
 #include "pixel_buffer.c"
+/* systray_menu.c's entry points: what they were asked is remembered */
+static int g_menu_open_count;
+static char g_menu_open_bus[64];
+static char g_menu_open_path[64];
+static char g_menu_open_title[64];
+static int g_menu_open_x, g_menu_open_y;
+static void
+wm_systray_menu_open(struct wm_systray *systray, const char *bus_name,
+	const char *item_path, const char *menu_path, const char *title,
+	int x, int y)
+{
+	(void)systray; (void)item_path;
+	g_menu_open_count++;
+	snprintf(g_menu_open_bus, sizeof(g_menu_open_bus), "%s", bus_name);
+	snprintf(g_menu_open_path, sizeof(g_menu_open_path), "%s", menu_path);
+	snprintf(g_menu_open_title, sizeof(g_menu_open_title), "%s",
+		title ? title : "");
+	g_menu_open_x = x;
+	g_menu_open_y = y;
+}
+static void wm_systray_menu_cancel_all(struct wm_systray *systray)
+	{ (void)systray; }
+
 #include "../src/systray.c"
 
 /* --- Test helpers --- */
@@ -1572,6 +1610,17 @@ test_systray_destroy_null(void)
 	printf("  PASS: test_systray_destroy_null\n");
 }
 
+/* An async reply's userdata: the callback finds the item in the list and frees this */
+static struct item_query *
+make_query(struct wm_systray *systray, struct wm_systray_item *item)
+{
+	struct item_query *q = malloc(sizeof(*q));
+	assert(q);
+	q->systray = systray;
+	q->item = item;
+	return q;
+}
+
 /*
  * Test 29: handle_get_id with successful read sets item->id.
  */
@@ -1588,7 +1637,7 @@ test_handle_get_id_success(void)
 	g_sdbus_read_str1 = "myapp";
 	g_sdbus_is_method_error_ret = 0;
 
-	int ret = handle_get_id(NULL, item, NULL);
+	int ret = handle_get_id(NULL, make_query(systray, item), NULL);
 	assert(ret == 0);
 	assert(item->id != NULL);
 	assert(strcmp(item->id, "myapp") == 0);
@@ -1609,7 +1658,7 @@ test_handle_get_id_error(void)
 
 	g_sdbus_is_method_error_ret = 1;
 
-	int ret = handle_get_id(NULL, item, NULL);
+	int ret = handle_get_id(NULL, make_query(systray, item), NULL);
 	assert(ret == 0);
 	assert(item->id == NULL); /* not set */
 
@@ -1633,7 +1682,7 @@ test_handle_get_icon_name_success(void)
 	g_sdbus_read_str1 = "network-wireless";
 	g_sdbus_is_method_error_ret = 0;
 
-	int ret = handle_get_icon_name(NULL, item, NULL);
+	int ret = handle_get_icon_name(NULL, make_query(systray, item), NULL);
 	assert(ret == 0);
 	assert(item->icon_name != NULL);
 	assert(strcmp(item->icon_name, "network-wireless") == 0);
@@ -1659,7 +1708,7 @@ test_handle_get_icon_name_error(void)
 
 	g_sdbus_is_method_error_ret = 1;
 
-	int ret = handle_get_icon_name(NULL, item, NULL);
+	int ret = handle_get_icon_name(NULL, make_query(systray, item), NULL);
 	assert(ret == 0);
 	assert(item->icon_name == NULL);
 
@@ -1693,8 +1742,9 @@ test_register_item_bus_name(void)
 	assert(item != NULL);
 	assert(strcmp(item->object_path, "/StatusNotifierItem") == 0);
 
-	/* query_item_properties should have been called (2 async calls) */
-	assert(g_sdbus_call_method_async_count == 2);
+	/* query_item_properties should have been called (7 async calls: Id, IconName, IconPixmap, ToolTip, Title, Menu,
+	 * ItemIsMenu) */
+	assert(g_sdbus_call_method_async_count == 7);
 
 	destroy_test_systray(systray);
 	printf("  PASS: test_register_item_bus_name\n");
@@ -2002,8 +2052,9 @@ test_query_item_properties(void)
 
 	query_item_properties(systray, item);
 
-	/* Should have made 2 async method calls (Id + IconName) */
-	assert(g_sdbus_call_method_async_count == 2);
+	/* Should have made 7 async method calls (Id, IconName, IconPixmap,
+	 * ToolTip, Title, Menu, ItemIsMenu) */
+	assert(g_sdbus_call_method_async_count == 7);
 
 	destroy_test_systray(systray);
 	printf("  PASS: test_query_item_properties\n");
@@ -2083,6 +2134,210 @@ test_pin_order(void)
 	printf("  PASS: pin_order\n");
 }
 
+/*
+ * Test: a reply for an item that is gone (its application quit) is
+ * ignored, not used.
+ */
+static void
+test_query_reply_for_gone_item(void)
+{
+	reset_globals();
+	struct wm_systray *systray = make_test_systray();
+	struct wm_systray_item *item = add_test_item(systray, ":1.d0", false);
+	struct item_query *q = make_query(systray, item);
+
+	/* The item goes before the reply comes */
+	systray_item_destroy(item);
+
+	g_sdbus_read_ret = 0;
+	g_sdbus_read_str1 = "late";
+	g_sdbus_is_method_error_ret = 0;
+	int ret = handle_get_id(NULL, q, NULL);
+	assert(ret == 0);
+	assert(systray->item_count == 0);
+
+	destroy_test_systray(systray);
+	printf("  PASS: test_query_reply_for_gone_item\n");
+}
+
+/*
+ * Test: set_tooltip puts the title, then the description, on lines.
+ */
+static void
+test_set_tooltip_text(void)
+{
+	reset_globals();
+	struct wm_systray *systray = make_test_systray();
+	struct wm_systray_item *item = add_test_item(systray, ":1.d1", false);
+
+	set_tooltip(item, "BAT0", "Charge: 99%\nPower: connected");
+	assert(item->tooltip != NULL);
+	assert(strcmp(item->tooltip, "BAT0\nCharge: 99%\nPower: connected") == 0);
+
+	/* Carriage returns and trailing line breaks go */
+	set_tooltip(item, "T", "a\r\nb\n\n");
+	assert(strcmp(item->tooltip, "T\na\nb") == 0);
+
+	set_tooltip(item, "Only a title", "");
+	assert(strcmp(item->tooltip, "Only a title") == 0);
+
+	set_tooltip(item, "", "Only text");
+	assert(strcmp(item->tooltip, "Only text") == 0);
+
+	set_tooltip(item, "", "");
+	assert(item->tooltip == NULL);
+
+	destroy_test_systray(systray);
+	printf("  PASS: test_set_tooltip_text\n");
+}
+
+/*
+ * Test: wm_systray_tooltip_at finds the icon under the pointer, in
+ * layout coordinates, and falls back to the title and the id.
+ */
+static void
+test_tooltip_at(void)
+{
+	reset_globals();
+	struct wm_systray *systray = make_test_systray();
+	struct wm_systray_item *a = add_test_item(systray, ":1.d2", true);
+	struct wm_systray_item *b = add_test_item(systray, ":1.d3", true);
+	struct wm_systray_item *c = add_test_item(systray, ":1.d4", true);
+	a->tooltip = strdup("first");
+	b->title = strdup("second title");
+	c->id = strdup("third-id");
+
+	/* The tray at (100, 50), 24 high: icons at x=102, 122, 142; y=53 */
+	wm_systray_layout(systray, 100, 50, 200, 24);
+
+	const char *t = wm_systray_tooltip_at(systray, 110.0, 60.0);
+	assert(t && strcmp(t, "first") == 0);
+	t = wm_systray_tooltip_at(systray, 130.0, 60.0);
+	assert(t && strcmp(t, "second title") == 0);
+	t = wm_systray_tooltip_at(systray, 150.0, 60.0);
+	assert(t && strcmp(t, "third-id") == 0);
+
+	/* Between icons, past them, above them, elsewhere in the toolbar */
+	assert(wm_systray_tooltip_at(systray, 121.0, 60.0) == NULL);
+	assert(wm_systray_tooltip_at(systray, 300.0, 60.0) == NULL);
+	assert(wm_systray_tooltip_at(systray, 110.0, 51.0) == NULL);
+	assert(wm_systray_tooltip_at(systray, 10.0, 60.0) == NULL);
+	assert(wm_systray_tooltip_at(NULL, 110.0, 60.0) == NULL);
+
+	/* A click lands on the same icons, wherever the tray is */
+	assert(wm_systray_handle_click(systray, 10.0, 10.0, 0x110) == true);
+	assert(wm_systray_handle_click(systray, 110.0, 60.0, 0x110) == false);
+
+	destroy_test_systray(systray);
+	printf("  PASS: test_tooltip_at\n");
+}
+
+/*
+ * Test: IconPixmap's ARGB bytes become premultiplied native pixels.
+ */
+static void
+test_pixmap_to_surface(void)
+{
+	reset_globals();
+
+	/* 2x1: opaque red, then half-transparent pure green (A,R,G,B) */
+	const uint8_t argb[] = {
+		0xff, 0xff, 0x00, 0x00,
+		0x80, 0x00, 0xff, 0x00,
+	};
+	cairo_surface_t *s = pixmap_to_surface(argb, 2, 1);
+	assert(s != NULL);
+	assert(cairo_image_surface_get_width(s) == 2);
+	assert(cairo_image_surface_get_height(s) == 1);
+
+	const uint32_t *px = (const uint32_t *)cairo_image_surface_get_data(s);
+	assert(px[0] == 0xffff0000u);
+	/* 0xff * 0x80 / 255, rounded, is 0x80 */
+	assert(px[1] == 0x80008000u);
+
+	cairo_surface_destroy(s);
+	printf("  PASS: test_pixmap_to_surface\n");
+}
+
+/*
+ * Test: where a click goes -- an icon with a menu shows it (right
+ * button; the left one too when the icon is only a menu), the others get
+ * the item's own Activate / ContextMenu / SecondaryActivate.
+ */
+static void
+test_click_routing_with_menu(void)
+{
+	reset_globals();
+	g_menu_open_count = 0;
+	struct wm_systray *systray = make_test_systray();
+	struct wm_systray_item *item = add_test_item(systray, ":1.e0", true);
+	item->id = strdup("the-app");
+	wm_systray_layout(systray, 100, 50, 200, 24);
+
+	/* No menu: the item is called, nothing is shown */
+	int before = g_sdbus_call_method_async_count;
+	assert(wm_systray_handle_click(systray, 10.0, 10.0, 0x111));
+	assert(g_menu_open_count == 0);
+	assert(g_sdbus_call_method_async_count == before + 1);
+
+	/* A menu: the right button shows it, nobody is called */
+	item->menu_path = strdup("/MenuBar");
+	before = g_sdbus_call_method_async_count;
+	assert(wm_systray_handle_click(systray, 10.0, 10.0, 0x111));
+	assert(g_menu_open_count == 1);
+	assert(strcmp(g_menu_open_bus, ":1.e0") == 0);
+	assert(strcmp(g_menu_open_path, "/MenuBar") == 0);
+	assert(strcmp(g_menu_open_title, "the-app") == 0);
+	assert(g_menu_open_x == 110 && g_menu_open_y == 60);
+	assert(g_sdbus_call_method_async_count == before);
+
+	/* The left button still activates it... */
+	assert(wm_systray_handle_click(systray, 10.0, 10.0, 0x110));
+	assert(g_menu_open_count == 1);
+	assert(g_sdbus_call_method_async_count == before + 1);
+
+	/* ...unless it is only a menu; its title is the one it gave */
+	item->is_menu = true;
+	item->title = strdup("The App");
+	assert(wm_systray_handle_click(systray, 10.0, 10.0, 0x110));
+	assert(g_menu_open_count == 2);
+	assert(strcmp(g_menu_open_title, "The App") == 0);
+
+	/* The middle button is always the item's */
+	before = g_sdbus_call_method_async_count;
+	assert(wm_systray_handle_click(systray, 10.0, 10.0, 0x112));
+	assert(g_menu_open_count == 2);
+	assert(g_sdbus_call_method_async_count == before + 1);
+
+	destroy_test_systray(systray);
+	printf("  PASS: test_click_routing_with_menu\n");
+}
+
+/*
+ * Test: the Menu and ItemIsMenu properties; "/" means no menu.
+ */
+static void
+test_handle_get_menu(void)
+{
+	reset_globals();
+	struct wm_systray *systray = make_test_systray();
+	struct wm_systray_item *item = add_test_item(systray, ":1.e1", false);
+
+	g_sdbus_read_ret = 0;
+	g_sdbus_read_str1 = "/com/canonical/dbusmenu";
+	g_sdbus_is_method_error_ret = 0;
+	assert(handle_get_menu(NULL, make_query(systray, item), NULL) == 0);
+	assert(item->menu_path &&
+		strcmp(item->menu_path, "/com/canonical/dbusmenu") == 0);
+
+	g_sdbus_read_str1 = "/";
+	assert(handle_get_menu(NULL, make_query(systray, item), NULL) == 0);
+	assert(item->menu_path == NULL);
+
+	destroy_test_systray(systray);
+	printf("  PASS: test_handle_get_menu\n");
+}
+
 int
 main(void)
 {
@@ -2120,6 +2375,12 @@ main(void)
 	test_handle_get_id_error();
 	test_handle_get_icon_name_success();
 	test_handle_get_icon_name_error();
+	test_query_reply_for_gone_item();
+	test_set_tooltip_text();
+	test_tooltip_at();
+	test_pixmap_to_surface();
+	test_click_routing_with_menu();
+	test_handle_get_menu();
 	test_register_item_bus_name();
 	test_register_item_object_path();
 	test_register_item_null_sender();
