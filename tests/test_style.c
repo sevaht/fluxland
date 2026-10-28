@@ -123,6 +123,36 @@ test_systray_tooltip(void)
 	printf("  PASS: test_systray_tooltip\n");
 }
 
+/* Test: dpi of the style (the init's overrides it; 0 = not set) */
+static void
+test_dpi(void)
+{
+	struct wm_style *s = style_create();
+	assert(s != NULL);
+	assert(s->dpi == 0);
+
+	write_file(TEST_STYLE, "dpi: 120\n");
+	assert(style_load(s, TEST_STYLE) == 0);
+	assert(s->dpi == 120);
+
+	/* Out of range is not set; so is a key taken out, on reload */
+	write_file(TEST_STYLE, "dpi: 5000\n");
+	assert(style_load(s, TEST_STYLE) == 0);
+	assert(s->dpi == 0);
+	write_file(TEST_STYLE, "dpi: -4\n");
+	assert(style_load(s, TEST_STYLE) == 0);
+	assert(s->dpi == 0);
+	write_file(TEST_STYLE, "dpi: 96\n");
+	assert(style_load(s, TEST_STYLE) == 0);
+	assert(s->dpi == 96);
+	write_file(TEST_STYLE, "toolbar.height: 20\n");
+	assert(style_load(s, TEST_STYLE) == 0);
+	assert(s->dpi == 0);
+
+	style_destroy(s);
+	printf("  PASS: test_dpi\n");
+}
+
 /* Test: style_create returns valid defaults, style_destroy frees cleanly */
 static void
 test_create_destroy(void)
@@ -1290,6 +1320,7 @@ main(void)
 	test_texture_null_empty();
 	test_font_parsing();
 	test_systray_tooltip();
+	test_dpi();
 	test_load_style_file();
 	test_load_nonexistent();
 	test_argb_conversion();

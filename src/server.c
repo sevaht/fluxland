@@ -203,6 +203,18 @@ wm_server_reload_keys(struct wm_server *server, bool keep_mode)
 			server->config->mouse_button_map);
 }
 
+/*
+ * The resolution of text in points: the init's session.dpi, else the
+ * style's dpi, else 96.  True when it is not what text was drawn with.
+ */
+static bool
+apply_dpi(struct wm_server *server)
+{
+	return wm_render_set_dpi(wm_dpi_resolve(
+		server->config ? server->config->dpi : 0,
+		server->style ? server->style->dpi : 0));
+}
+
 void
 wm_server_reconfigure(struct wm_server *server)
 {
@@ -214,6 +226,15 @@ wm_server_reconfigure(struct wm_server *server)
 		wm_input_apply_config(server);
 		wm_output_apply_config(server);
 	}
+
+	/* The X resources file, if it changed: for programs started now */
+	wm_xwayland_apply_resources(server);
+
+	/*
+	 * Fonts are sized in it: a new dpi of the init is a reason to read
+	 * the style again, which has everything that depends on them redone
+	 */
+	bool dpi_changed = apply_dpi(server);
 
 	/* Broadcast config_reloaded event to IPC subscribers */
 	wm_ipc_broadcast_event(&server->ipc,
@@ -233,6 +254,8 @@ wm_server_reconfigure(struct wm_server *server)
 	if (server->config && server->config->style_overlay &&
 	    config_file_changed(server->config->style_overlay,
 			&server->config->style_overlay_mtime))
+		style_changed = true;
+	if (dpi_changed)
 		style_changed = true;
 	bool menu_changed = !server->config ||
 		!server->config->menu_file ||
@@ -255,6 +278,8 @@ wm_server_reconfigure(struct wm_server *server)
 				server->config->style_overlay);
 			style_load(server->style,
 				server->config->style_file);
+			/* The style may have its own */
+			apply_dpi(server);
 
 			/* Broadcast style_changed event to IPC subscribers */
 			wm_ipc_broadcast_event(&server->ipc,
@@ -560,6 +585,8 @@ wm_server_init(struct wm_server *server)
 				server->config->style_file);
 		}
 	}
+	apply_dpi(server);
+	wlr_log(WLR_INFO, "text is drawn at %d dpi", wm_render_dpi());
 
 	/* Load keybindings into keymode system */
 	wl_list_init(&server->keybindings);

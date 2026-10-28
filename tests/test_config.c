@@ -192,6 +192,29 @@ test_focus_models(void)
 	printf("  PASS: test_focus_models\n");
 }
 
+/* Test: session.dpi (0 = the style's, else 96) */
+static void
+test_dpi(void)
+{
+	write_file(TEST_INIT, "session.screen0.workspaces: 4\n");
+	struct wm_config *c = config_create();
+	config_load(c, TEST_INIT);
+	assert(c->dpi == 0);
+
+	write_file(TEST_INIT, "session.dpi: 120\n");
+	config_load(c, TEST_INIT);
+	assert(c->dpi == 120);
+
+	write_file(TEST_INIT, "session.dpi: 99999\n");
+	config_load(c, TEST_INIT);
+	assert(c->dpi == 0);
+	write_file(TEST_INIT, "session.dpi: -1\n");
+	config_load(c, TEST_INIT);
+	assert(c->dpi == 0);
+	config_destroy(c);
+	printf("  PASS: test_dpi\n");
+}
+
 /* Test: xwayland.inputEmulation, who may inject input through XTest */
 static void
 test_input_emulation(void)
@@ -1883,6 +1906,7 @@ main(void)
 	test_load_basic();
 	test_focus_models();
 	test_input_emulation();
+	test_dpi();
 	test_placement_policies();
 	test_workspace_names();
 	test_workspace_count_clamp();

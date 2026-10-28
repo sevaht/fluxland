@@ -916,6 +916,44 @@ wm_font_height(const struct wm_font *font, float scale)
 	return h;
 }
 
+/* The resolution of text in points (see render.h) */
+static int render_dpi = WM_DEFAULT_DPI;
+
+int
+wm_dpi_resolve(int init_dpi, int style_dpi)
+{
+	if (init_dpi > 0)
+		return init_dpi;
+	if (style_dpi > 0)
+		return style_dpi;
+	return WM_DEFAULT_DPI;
+}
+
+int
+wm_render_dpi(void)
+{
+	return render_dpi;
+}
+
+bool
+wm_render_set_dpi(int dpi)
+{
+	if (dpi < 24)
+		dpi = 24;
+	if (dpi > 960)
+		dpi = 960;
+	/* Not only when it differs: Pango's own default is not ours */
+	pango_cairo_font_map_set_resolution(
+		PANGO_CAIRO_FONT_MAP(pango_cairo_font_map_get_default()), dpi);
+	if (dpi == render_dpi)
+		return false;
+	render_dpi = dpi;
+	/* What the cached layout measured was for the old resolution */
+	if (measure_layout)
+		pango_layout_context_changed(measure_layout);
+	return true;
+}
+
 void
 wm_render_cleanup(void)
 {

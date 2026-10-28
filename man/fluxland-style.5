@@ -153,7 +153,23 @@ Each font resource also supports shadow properties:
 \fIfont_key\fP.shadow.color: \fIcolor\fP
 .fi
 .RE
+.PP
+A size in points is drawn at the resolution of
+.B session.dpi
+of the init file, else of this file's
+.B dpi
+resource, else at 96 dpi: size 8 is 8/72 inch, 10.67 pixels at 96.
+Sizes in pixels (an X font's, as in
+.BR \-*\-helvetica\-medium\-r\-*\-*\-11\-* )
+do not depend on it.
 .SH RESOURCES
+.SS General
+.TP
+.B dpi
+Resolution of text sized in points, from 24 to 960 (default: 96).
+The init file's
+.B session.dpi
+takes its place when set.
 .SS Window Title Bar
 .TP
 .B window.title.focus

@@ -1071,6 +1071,9 @@ load_toolbar(struct wm_style *s, struct rc_database *db, const char *sd)
 		s->toolbar_border_width = 0;
 	s->toolbar_border_color = color_chain(db, KEYS("toolbar.borderColor"),
 		make_color(0, 0, 0));
+	s->dpi = int_chain(db, KEYS("dpi"), 0);
+	if (s->dpi < 0 || s->dpi > 960)
+		s->dpi = 0;
 	s->toolbar_height = int_chain(db, KEYS("toolbar.height"), 0);
 	if (s->toolbar_height < 0 || s->toolbar_height > 100)
 		s->toolbar_height = 0;

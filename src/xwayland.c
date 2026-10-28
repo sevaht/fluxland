@@ -23,6 +23,7 @@
 #ifdef WM_HAS_XWAYLAND
 
 #include <cairo.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <wlr/types/wlr_compositor.h>
@@ -36,6 +37,7 @@
 #include <xcb/xcb_ewmh.h>
 #include <xcb/xcb_icccm.h>
 
+#include "config.h"
 #include "decoration.h"
 #include "icon.h"
 #include "server.h"
@@ -1283,6 +1285,61 @@ handle_xwayland_new_surface(struct wl_listener *listener, void *data)
 		create_managed(server, xsurface);
 }
 
+/* More than a resources file is: it would be a mistake, not a setting */
+#define XRESOURCES_MAX (1024 * 1024)
+
+/* The whole of a file in a new buffer (not terminated), or NULL */
+static char *
+read_resources_file(const char *path, size_t *len)
+{
+	FILE *file = fopen(path, "r");
+	if (!file)
+		return NULL;
+	char *buf = malloc(XRESOURCES_MAX + 1);
+	if (!buf) {
+		fclose(file);
+		return NULL;
+	}
+	*len = fread(buf, 1, XRESOURCES_MAX + 1, file);
+	bool bad = ferror(file) || *len > XRESOURCES_MAX;
+	fclose(file);
+	if (bad) {
+		free(buf);
+		return NULL;
+	}
+	return buf;
+}
+
+void
+wm_xwayland_apply_resources(struct wm_server *server)
+{
+	if (!server->xwayland || !server->config ||
+	    !server->config->xwayland_resources)
+		return;
+	/* None before XWayland has started: it is done when it is ready */
+	xcb_connection_t *conn =
+		wlr_xwayland_get_xwm_connection(server->xwayland);
+	if (!conn)
+		return;
+
+	const char *path = server->config->xwayland_resources;
+	size_t len = 0;
+	char *resources = read_resources_file(path, &len);
+	if (!resources) {
+		wlr_log(WLR_ERROR, "xwayland: cannot read X resources from %s "
+			"(or it is over %d bytes)", path, XRESOURCES_MAX);
+		return;
+	}
+	xcb_screen_t *screen = xcb_setup_roots_iterator(
+		xcb_get_setup(conn)).data;
+	xcb_change_property(conn, XCB_PROP_MODE_REPLACE, screen->root,
+		XCB_ATOM_RESOURCE_MANAGER, XCB_ATOM_STRING, 8, (uint32_t)len,
+		resources);
+	xcb_flush(conn);
+	free(resources);
+	wlr_log(WLR_INFO, "xwayland: X resources loaded from %s", path);
+}
+
 static void
 handle_xwayland_ready(struct wl_listener *listener, void *data)
 {
@@ -1296,6 +1353,9 @@ handle_xwayland_ready(struct wl_listener *listener, void *data)
 		resolve_atoms(conn, &server->xwayland_atoms);
 		wlr_log(WLR_INFO, "%s", "xwayland: atoms resolved");
 	}
+
+	/* What xrdb does in an X session: for the programs started now */
+	wm_xwayland_apply_resources(server);
 
 	/* Set the XWayland cursor */
 	wlr_xwayland_set_seat(server->xwayland, server->seat);
@@ -1393,6 +1453,12 @@ wm_xwayland_finish(struct wm_server *server)
 
 void
 wm_xwayland_sync_positions(struct wm_server *server)
+{
+	(void)server;
+}
+
+void
+wm_xwayland_apply_resources(struct wm_server *server)
 {
 	(void)server;
 }

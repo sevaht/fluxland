@@ -22,6 +22,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 #include <sys/types.h>
 
 /* --- Block real headers via their include guards --- */
@@ -245,6 +246,8 @@ typedef struct { xcb_atom_t type; uint8_t format; char value[64];
 	int len; } xcb_get_property_reply_t;
 static char g_xprop_value[64];
 static int g_xprop_len = -1;
+static xcb_window_t g_xprop_window;
+static xcb_atom_t g_xprop_atom, g_xprop_type;
 static xcb_get_property_cookie_t
 xcb_get_property(xcb_connection_t *c, uint8_t d, xcb_window_t w, xcb_atom_t p,
 	xcb_atom_t t, uint32_t o, uint32_t l)
@@ -275,7 +278,10 @@ static void
 xcb_change_property(xcb_connection_t *c, uint8_t m, xcb_window_t w,
 	xcb_atom_t p, xcb_atom_t t, uint8_t f, uint32_t len, const void *data)
 {
-	(void)c; (void)m; (void)w; (void)p; (void)t; (void)f;
+	(void)c; (void)m; (void)f;
+	g_xprop_window = w;
+	g_xprop_atom = p;
+	g_xprop_type = t;
 	if (len >= sizeof(g_xprop_value))
 		len = sizeof(g_xprop_value) - 1;
 	memcpy(g_xprop_value, data, len);
@@ -283,6 +289,19 @@ xcb_change_property(xcb_connection_t *c, uint8_t m, xcb_window_t w,
 	g_xprop_len = (int)len;
 }
 static int xcb_flush(xcb_connection_t *c) { (void)c; return 0; }
+
+/* The root window a property is set on, and the property's name and type */
+#define XCB_ATOM_RESOURCE_MANAGER 23
+#define XCB_ATOM_STRING 31
+typedef struct { xcb_window_t root; } xcb_screen_t;
+typedef struct { xcb_screen_t *data; } xcb_screen_iterator_t;
+typedef struct { int dummy; } xcb_setup_t;
+static xcb_screen_t g_xcb_screen = { .root = 77 };
+static xcb_setup_t g_xcb_setup;
+static const xcb_setup_t *xcb_get_setup(xcb_connection_t *c)
+	{ (void)c; return &g_xcb_setup; }
+static xcb_screen_iterator_t xcb_setup_roots_iterator(const xcb_setup_t *s)
+	{ (void)s; return (xcb_screen_iterator_t){ .data = &g_xcb_screen }; }
 
 /* --- XWayland --- */
 
@@ -716,6 +735,7 @@ struct wm_style { int dummy; };
 
 struct wm_server {
 	struct wl_display *wl_display;
+	struct wm_config *config;
 	void *compositor;
 	struct wlr_seat *seat;
 	struct wlr_xcursor_manager *cursor_mgr;
@@ -1908,10 +1928,101 @@ test_override_redirect_changes(void)
 	printf("  PASS: override_redirect_changes\n");
 }
 
+/* A file of the given text in a new temp directory (path out) */
+static void
+make_resources_file(char *path, size_t path_size, const char *text,
+	size_t repeat)
+{
+	char dir[] = "/tmp/fluxland-xres-XXXXXX";
+	assert(mkdtemp(dir));
+	snprintf(path, path_size, "%s/Xresources", dir);
+	FILE *f = fopen(path, "w");
+	assert(f);
+	for (size_t i = 0; i < repeat; i++)
+		fputs(text, f);
+	fclose(f);
+}
+
+static void
+remove_resources_file(const char *path)
+{
+	unlink(path);
+	char dir[256];
+	snprintf(dir, sizeof(dir), "%s", path);
+	*strrchr(dir, '/') = '\0';
+	rmdir(dir);
+}
+
+/*
+ * session.xwayland.resources: the file goes to XWayland's RESOURCE_MANAGER
+ * as it is, each time (it is for the programs started after); nothing when
+ * there is no file set, no XWayland yet, no such file or too big a one.
+ */
+static void
+test_apply_resources(void)
+{
+	static xcb_connection_t *conn_token = (xcb_connection_t *)&conn_token;
+	static struct wlr_xwayland fake_xwayland;
+	struct wm_config config;
+	memset(&config, 0, sizeof(config));
+	struct wm_server srv;
+	memset(&srv, 0, sizeof(srv));
+	srv.xwayland = &fake_xwayland;
+	srv.config = &config;
+	char path[300];
+
+	/* No file set */
+	g_xwm_conn = conn_token;
+	g_xprop_len = -1;
+	wm_xwayland_apply_resources(&srv);
+	assert(g_xprop_len == -1);
+
+	/* A file, but XWayland is not up (its connection is not there) */
+	const char *text = "Xft.dpi: 96\nXft.rgba: rgb\n";
+	make_resources_file(path, sizeof(path), text, 1);
+	config.xwayland_resources = path;
+	g_xwm_conn = NULL;
+	wm_xwayland_apply_resources(&srv);
+	assert(g_xprop_len == -1);
+
+	/* Up: the root window's RESOURCE_MANAGER, a string, as it is */
+	g_xwm_conn = conn_token;
+	wm_xwayland_apply_resources(&srv);
+	assert(g_xprop_len == (int)strlen(text));
+	assert(strcmp(g_xprop_value, text) == 0);
+	assert(g_xprop_window == 77);
+	assert(g_xprop_atom == XCB_ATOM_RESOURCE_MANAGER);
+	assert(g_xprop_type == XCB_ATOM_STRING);
+	remove_resources_file(path);
+
+	/* Gone: what is there stays */
+	g_xprop_len = -1;
+	wm_xwayland_apply_resources(&srv);
+	assert(g_xprop_len == -1);
+
+	/* An empty file is a resource list with nothing in it */
+	make_resources_file(path, sizeof(path), "", 0);
+	wm_xwayland_apply_resources(&srv);
+	assert(g_xprop_len == 0);
+	remove_resources_file(path);
+
+	/* Over a megabyte is a mistake, not resources */
+	g_xprop_len = -1;
+	make_resources_file(path, sizeof(path),
+		"! 0123456789012345678901234567890123456789\n", 30000);
+	wm_xwayland_apply_resources(&srv);
+	assert(g_xprop_len == -1);
+	remove_resources_file(path);
+
+	config.xwayland_resources = NULL;
+	printf("  PASS: apply_resources\n");
+}
+
 int
 main(void)
 {
 	printf("test_xwayland_logic:\n");
+	test_apply_resources();
 
 	test_classify();
 	test_new_surface_routing();

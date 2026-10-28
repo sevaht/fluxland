@@ -37,6 +37,7 @@ struct wm_systray_item {
 	char *id;              /* application identifier */
 	int order;             /* systray.pinLeft (< 0) / pinRight (> 0) */
 	char *icon_name;       /* named icon (freedesktop) */
+	char *icon_theme_path; /* IconThemePath: the application's own icons */
 	char *menu_path;       /* Menu property: its com.canonical.dbusmenu */
 	bool is_menu;          /* ItemIsMenu: it has a menu, no window */
 	char *title;           /* Title property, the tooltip's fallback */

@@ -264,6 +264,7 @@ struct wm_style {
 	int toolbar_border_width;
 	struct wm_color toolbar_border_color;
 	int toolbar_height;		/* toolbar.height; 0 = from the fonts */
+	int dpi;			/* dpi; 0 = the init's, else 96 */
 	/* fluxland 1.x's toolbar.font and toolbar.textColor, which the
 	 * tools fall back to before the defaults */
 	struct wm_font toolbar_font;

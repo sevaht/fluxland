@@ -356,6 +356,7 @@ enum wm_workspace_mode {
 
 struct wm_config {
 	int focus_policy;
+	int dpi;
 	bool show_window_position;
 	char *keys_file;
 	char *style_file;
@@ -400,7 +401,7 @@ struct wm_view {
 };
 
 /* Forward declares for pointer types */
-struct wm_style { int dummy; };
+struct wm_style { int dpi; };
 struct wm_menu { int dummy; };
 struct wm_toolbar { int dummy; };
 struct wm_slit { int dummy; };
@@ -947,6 +948,20 @@ wlr_xcursor_manager_destroy(struct wlr_xcursor_manager *mgr)
 /* --- fluxland module stubs --- */
 
 static void wm_render_cleanup(void) { }
+static int g_stub_dpi = 96;
+static int
+wm_dpi_resolve(int init_dpi, int style_dpi)
+{
+	return init_dpi > 0 ? init_dpi : style_dpi > 0 ? style_dpi : 96;
+}
+static bool
+wm_render_set_dpi(int dpi)
+{
+	bool changed = dpi != g_stub_dpi;
+	g_stub_dpi = dpi;
+	return changed;
+}
+static int wm_render_dpi(void) { return g_stub_dpi; }
 
 static void config_reload(struct wm_config *config)
 {
@@ -1222,6 +1237,7 @@ static void wm_drm_syncobj_init(struct wm_server *s) { (void)s; }
 static void wm_drm_syncobj_finish(struct wm_server *s) { (void)s; }
 static void wm_xwayland_init(struct wm_server *s) { (void)s; }
 static void wm_xwayland_finish(struct wm_server *s) { (void)s; }
+static void wm_xwayland_apply_resources(struct wm_server *s) { (void)s; }
 static void wm_eis_init(struct wm_server *s) { (void)s; }
 static void wm_eis_finish(struct wm_server *s) { (void)s; }
 static struct wm_wallpaper *wm_wallpaper_create(struct wm_server *s) { (void)s; return NULL; }

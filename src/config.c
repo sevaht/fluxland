@@ -622,6 +622,7 @@ config_create(void)
 	config->toolbar_auto_hide_delay_ms = 500;
 	config->toolbar_width_percent = 72;
 	config->toolbar_height = 0;
+	config->dpi = 0;
 	config->toolbar_layer = 4; /* Dock */
 	config->toolbar_alpha = 255;
 	config->update_activation_env = -1;
@@ -918,6 +919,9 @@ apply_toolbar_config(struct wm_config *config, struct rc_database *db)
 
 	config->toolbar_height =
 		rc_get_int(db, "session.screen0.toolbar.height", 0);
+	config->dpi = rc_get_int(db, "session.dpi", 0);
+	if (config->dpi < 0 || config->dpi > 960)
+		config->dpi = 0;
 	config->toolbar_layer = parse_dock_layer(
 		rc_get_string(db, "session.screen0.toolbar.layer"));
 	config->toolbar_alpha =
@@ -1190,6 +1194,13 @@ apply_menu_config(struct wm_config *config, struct rc_database *db)
 	/* Window menu file: the init's, else a windowmenu file in the
 	 * config directory (Fluxbox's ~/.fluxbox/windowmenu), else the
 	 * built-in copy of Fluxbox's */
+	free(config->xwayland_resources);
+	config->xwayland_resources = NULL;
+	val = rc_get_string(db, "session.xwayland.resources");
+	if (val && *val)
+		config->xwayland_resources = resolve_path(config->config_dir,
+			val, "Xresources");
+
 	free(config->window_menu_file);
 	config->window_menu_file = NULL;
 	val = rc_get_string(db, "session.screen0.windowMenu");
@@ -1960,6 +1971,7 @@ config_destroy(struct wm_config *config)
 	free(config->systray_pin_right);
 	free(config->eis_allow);
 	free(config->eis_deny);
+	free(config->xwayland_resources);
 	free(config->window_menu_file);
 	free(config->iconbar_iconified_pattern);
 	free(config->iconbar_mode_spec);

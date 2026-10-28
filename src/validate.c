@@ -318,6 +318,8 @@ static const struct init_key_spec init_keys[] = {
 	{"session.screen0.toolbar.autoHideDelay", VT_INT, 0, 10000, NULL},
 	{"session.screen0.toolbar.widthPercent", VT_INT, 10, 100, NULL},
 	{"session.screen0.toolbar.height", VT_INT, 0, 200, NULL},
+	{"session.dpi", VT_INT, 0, 960, NULL},
+	{"session.xwayland.resources", VT_STRING, 0, 0, NULL},
 	{"session.screen0.toolbar.layer", VT_LAYER, 0, 0, NULL},
 	{"session.screen0.toolbar.alpha", VT_INT, 0, 255, NULL},
 	{"session.screen0.toolbar.onhead", VT_INT, 0, 32, NULL},

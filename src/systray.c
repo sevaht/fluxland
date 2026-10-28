@@ -57,11 +57,76 @@ load_png(const char *path)
 }
 
 /*
- * Try to load an icon by name from standard icon directories.
- * Returns a cairo surface scaled to icon_size, or NULL.
+ * An icon from a directory laid out as an icon theme is (size/context/
+ * name.png): the sizes nearest the tray's first, and the status context,
+ * where tray icons live, with the others the applications put theirs in.
  */
 static cairo_surface_t *
-load_icon_by_name(const char *icon_name, int icon_size)
+load_from_theme_dir(const char *base, const char *icon_name)
+{
+	static const char *const sizes[] = {
+		"22x22", "24x24", "16x16", "32x32", "48x48", "64x64",
+		"96x96", "128x128", "256x256",
+	};
+	static const char *const contexts[] = {
+		"status", "apps", "devices", "panel",
+	};
+
+	char path[1024];
+	for (size_t i = 0; i < sizeof(sizes) / sizeof(sizes[0]); i++) {
+		for (size_t j = 0; j < sizeof(contexts) / sizeof(contexts[0]);
+		     j++) {
+			snprintf(path, sizeof(path), "%s/%s/%s/%s.png", base,
+				sizes[i], contexts[j], icon_name);
+			if (!file_exists(path)) {
+				continue;
+			}
+			cairo_surface_t *img = load_png(path);
+			if (img) {
+				wlr_log(WLR_DEBUG, "systray: loaded icon %s",
+					path);
+				return img;
+			}
+		}
+	}
+	return NULL;
+}
+
+/*
+ * The icon of an item named by IconThemePath, the directory of icons an
+ * application brings along (Spotify's): the file itself, or a theme
+ * inside it, with or without the hicolor directory in between.
+ */
+static cairo_surface_t *
+load_from_item_dir(const char *dir, const char *icon_name)
+{
+	if (!dir || dir[0] != '/') {
+		return NULL;
+	}
+
+	char path[1024];
+	snprintf(path, sizeof(path), "%s/%s.png", dir, icon_name);
+	if (file_exists(path)) {
+		cairo_surface_t *img = load_png(path);
+		if (img) {
+			wlr_log(WLR_DEBUG, "systray: loaded icon %s", path);
+			return img;
+		}
+	}
+
+	snprintf(path, sizeof(path), "%s/hicolor", dir);
+	cairo_surface_t *img = load_from_theme_dir(path, icon_name);
+	return img ? img : load_from_theme_dir(dir, icon_name);
+}
+
+/*
+ * Try to load an icon by name: from the directory the application named
+ * (IconThemePath), else from the standard icon directories.
+ * Returns a cairo surface, or NULL.
+ */
+static cairo_surface_t *
+load_icon_by_name(const char *icon_name, int icon_size,
+	const char *icon_theme_path)
 {
 	if (!icon_name || !*icon_name) {
 		return NULL;
@@ -77,38 +142,19 @@ load_icon_by_name(const char *icon_name, int icon_size)
 		return NULL;
 	}
 
-	/*
-	 * The hicolor theme (PNG only, no SVG): the sizes nearest the
-	 * tray's first, and the status context, where tray icons live,
-	 * with the others the applications put theirs in.
-	 */
-	static const char *const sizes[] = {
-		"22x22", "24x24", "16x16", "32x32", "48x48", "64x64",
-		"96x96", "128x128", "256x256",
-	};
-	static const char *const contexts[] = {
-		"status", "apps", "devices", "panel",
-	};
-
-	char path[512];
-	for (size_t i = 0; i < sizeof(sizes) / sizeof(sizes[0]); i++) {
-		for (size_t j = 0; j < sizeof(contexts) / sizeof(contexts[0]);
-		     j++) {
-			snprintf(path, sizeof(path),
-				"/usr/share/icons/hicolor/%s/%s/%s.png",
-				sizes[i], contexts[j], icon_name);
-			if (!file_exists(path)) {
-				continue;
-			}
-			cairo_surface_t *img = load_png(path);
-			if (img) {
-				wlr_log(WLR_DEBUG, "systray: loaded icon %s",
-					path);
-				return img;
-			}
-		}
+	cairo_surface_t *own = load_from_item_dir(icon_theme_path, icon_name);
+	if (own) {
+		return own;
 	}
 
+	/* The hicolor theme (PNG only, no SVG) */
+	cairo_surface_t *themed = load_from_theme_dir(
+		"/usr/share/icons/hicolor", icon_name);
+	if (themed) {
+		return themed;
+	}
+
+	char path[512];
 	snprintf(path, sizeof(path), "/usr/share/pixmaps/%s.png", icon_name);
 	if (file_exists(path)) {
 		return load_png(path);
@@ -219,6 +265,7 @@ systray_item_destroy(struct wm_systray_item *item)
 	free(item->object_path);
 	free(item->id);
 	free(item->icon_name);
+	free(item->icon_theme_path);
 	free(item->title);
 	free(item->tooltip);
 	free(item->menu_path);
@@ -234,7 +281,8 @@ systray_item_update_scene(struct wm_systray_item *item)
 	/* Get or create icon surface */
 	cairo_surface_t *icon = NULL;
 	if (item->icon_name && *item->icon_name) {
-		icon = load_icon_by_name(item->icon_name, size);
+		icon = load_icon_by_name(item->icon_name, size,
+			item->icon_theme_path);
 	}
 
 	if (!icon && item->icon_pixmap) {
@@ -427,6 +475,32 @@ handle_get_icon_name(sd_bus_message *reply, void *userdata,
 		}
 	}
 
+	refresh_item(item);
+	return 0;
+}
+
+static int
+handle_get_icon_theme_path(sd_bus_message *reply, void *userdata,
+	sd_bus_error *ret_error)
+{
+	struct wm_systray_item *item = query_take_item(userdata);
+
+	if (!item) {
+		return 0;
+	}
+
+	if (!sd_bus_message_is_method_error(reply, NULL)) {
+		const char *val = NULL;
+		int r = sd_bus_message_read(reply, "v", "s", &val);
+		if (r >= 0 && val) {
+			free(item->icon_theme_path);
+			item->icon_theme_path = *val ? strdup(val) : NULL;
+			wlr_log(WLR_DEBUG, "systray: item %s icon_theme_path=%s",
+				item->bus_name, val);
+		}
+	}
+
+	/* The icon may be one that is there */
 	refresh_item(item);
 	return 0;
 }
@@ -641,6 +715,7 @@ static void
 query_item_properties(struct wm_systray *systray, struct wm_systray_item *item)
 {
 	query_property(item, "Id", handle_get_id);
+	query_property(item, "IconThemePath", handle_get_icon_theme_path);
 	query_property(item, "IconName", handle_get_icon_name);
 	query_property(item, "IconPixmap", handle_get_icon_pixmap);
 	query_property(item, "ToolTip", handle_get_tooltip);
@@ -678,6 +753,7 @@ handle_new_icon(sd_bus_message *msg, void *userdata, sd_bus_error *ret_error)
 {
 	struct wm_systray_item *item = item_of_signal(userdata, msg);
 	if (item) {
+		query_property(item, "IconThemePath", handle_get_icon_theme_path);
 		query_property(item, "IconName", handle_get_icon_name);
 		query_property(item, "IconPixmap", handle_get_icon_pixmap);
 	}

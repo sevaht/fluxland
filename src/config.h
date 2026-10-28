@@ -221,6 +221,9 @@ struct wm_config {
 	int toolbar_auto_hide_delay_ms;
 	int toolbar_width_percent;
 	int toolbar_height;
+	int dpi;		/* session.dpi; 0 = the style's, else 96 */
+	char *xwayland_resources; /* session.xwayland.resources: X resources
+				   * (an Xresources file) for XWayland */
 	int toolbar_layer;
 	int toolbar_alpha;
 	int toolbar_on_head;

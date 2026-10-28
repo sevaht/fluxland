@@ -77,4 +77,14 @@ void wm_xwayland_finish(struct wm_server *server);
  */
 void wm_xwayland_sync_positions(struct wm_server *server);
 
+/*
+ * Put the X resources file of session.xwayland.resources (an Xresources
+ * file: Xft.dpi, Xft.hintstyle, XTerm*...) into XWayland's
+ * RESOURCE_MANAGER, as xrdb would; programs started afterwards read them.
+ * Done each time XWayland comes up (it is started when needed and goes when
+ * nothing uses it, taking what xrdb set with it), and on a reconfigure.
+ * Nothing when there is no file set, or XWayland is not running.
+ */
+void wm_xwayland_apply_resources(struct wm_server *server);
+
 #endif /* WM_XWAYLAND_H */

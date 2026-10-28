@@ -41,6 +41,34 @@ Blank lines and lines beginning with
 or
 .B !
 are comments.
+.SH GENERAL SETTINGS
+.TP
+.B session.dpi
+Resolution of the text fluxland draws (toolbar, menus, window titles) when
+fonts are sized in points, from 24 to 960 (0 = the style's
+.B dpi
+resource, else 96; default: 0).
+At 96 a size of 8 is 10.67 pixels.  Fonts sized in pixels are not affected.
+It does not reach other programs: those take it from their own
+settings (X11 programs from
+.B Xft.dpi
+in the X resources, see
+.BR session.xwayland.resources ).
+.TP
+.B session.xwayland.resources
+An X resources file (an \fI~/.Xresources\fR) to give XWayland: the
+\fBXft.dpi\fR, \fBXft.hintstyle\fR and \fBXft.rgba\fR that plain Xft
+programs (xterm, Tk, Emacs) read, and any other resource.  It is put into
+XWayland's RESOURCE_MANAGER, as \fBxrdb\fR would, each time XWayland
+starts and on a reconfigure, which \fBxrdb\fR in a startup file is not: XWayland
+is started when a program needs it and exits when none does, taking what
+\fBxrdb\fR set with it.  Programs read them as they start, so the one
+program that starts a stopped XWayland can read before they are there (a
+few milliseconds); any other started after, not.  The file is
+used as it is (no \fBcpp\fR, so no \fB#include\fR or \fB#define\fR).
+GTK and Qt programs take their font settings from XSETTINGS instead (see
+.BR xsettingsd (1)).
+Default: none.
 .SH WORKSPACE SETTINGS
 .TP
 .B session.screen0.workspaces

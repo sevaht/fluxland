@@ -615,7 +615,11 @@ draw_text(cairo_t *cr, const char *text, const struct wm_font *font,
 		tx = x + w - tw;
 	if (tx < x)
 		tx = x;
-	int ty = y + (h - th) / 2;
+	/*
+	 * The half pixel of an odd space goes above the text, as in Fluxbox
+	 * (its baseline is (h + ascent - descent) / 2 rounded up)
+	 */
+	int ty = y + (h - th + 1) / 2;
 	if (ty < y)
 		ty = y;
 	cairo_set_source_surface(cr, ts, tx, ty);

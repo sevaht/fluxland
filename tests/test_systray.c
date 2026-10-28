@@ -16,6 +16,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 
 /* Enable systray code paths */
 #ifndef WM_HAS_SYSTRAY
@@ -217,18 +218,28 @@ cairo_image_surface_create(cairo_format_t format, int width, int height)
 	return s;
 }
 
+/*
+ * In tests PNG files are not decoded: only those below g_png_dir (a test
+ * makes a directory of empty files) "load", as a small surface, and the
+ * path is kept.  Every other one fails, as the system's icons are not
+ * what is tested.
+ */
+static const char *g_png_dir;
+static char g_png_loaded[512];
+
 static cairo_surface_t *
 cairo_image_surface_create_from_png(const char *filename)
 {
-	(void)filename;
-	/* In tests we never actually load PNG files */
 	cairo_surface_t *s = calloc(1, sizeof(*s));
-	s->width = 0;
-	s->height = 0;
-	s->stride = 0;
-	s->data = NULL;
 	s->refcount = 1;
 	s->status = CAIRO_STATUS_INVALID_SIZE;
+	if (g_png_dir && !strncmp(filename, g_png_dir, strlen(g_png_dir))) {
+		snprintf(g_png_loaded, sizeof(g_png_loaded), "%s", filename);
+		s->width = s->height = 8;
+		s->stride = 32;
+		s->data = calloc(1, 8 * 32);
+		s->status = CAIRO_STATUS_SUCCESS;
+	}
 	return s;
 }
 
@@ -651,6 +662,7 @@ struct wm_systray_item {
 	char *id;
 	int order;
 	char *icon_name;
+	char *icon_theme_path;
 	char *menu_path;
 	bool is_menu;
 	char *title;
@@ -1399,7 +1411,7 @@ test_load_icon_null_name(void)
 {
 	reset_globals();
 
-	cairo_surface_t *result = load_icon_by_name(NULL, 18);
+	cairo_surface_t *result = load_icon_by_name(NULL, 18, NULL);
 	assert(result == NULL);
 
 	printf("  PASS: test_load_icon_null_name\n");
@@ -1413,10 +1425,91 @@ test_load_icon_empty_name(void)
 {
 	reset_globals();
 
-	cairo_surface_t *result = load_icon_by_name("", 18);
+	cairo_surface_t *result = load_icon_by_name("", 18, NULL);
 	assert(result == NULL);
 
 	printf("  PASS: test_load_icon_empty_name\n");
+}
+
+/* An empty file at DIR/REL, the directories in between made */
+static void
+touch_test_file(const char *dir, const char *rel)
+{
+	char path[512];
+	snprintf(path, sizeof(path), "%s/%s", dir, rel);
+	for (char *p = strchr(path + strlen(dir) + 1, '/'); p;
+	     p = strchr(p + 1, '/')) {
+		*p = '\0';
+		mkdir(path, 0755);
+		*p = '/';
+	}
+	FILE *f = fopen(path, "w");
+	assert(f);
+	fclose(f);
+}
+
+/* The path load_icon_by_name loaded the icon from, without the directory */
+static const char *
+loaded_from(const char *dir, const char *name, const char *theme_path)
+{
+	g_png_loaded[0] = '\0';
+	cairo_surface_t *img = load_icon_by_name(name, 22, theme_path);
+	if (!img) {
+		return NULL;
+	}
+	cairo_surface_destroy(img);
+	return g_png_loaded + strlen(dir) + 1;
+}
+
+/*
+ * IconThemePath: the directory of icons an application brings along
+ * (Spotify's, flat) is searched first; a theme inside it works too; a
+ * path that isn't absolute, or has no such icon, is not used.
+ */
+static void
+test_load_icon_from_item_theme_path(void)
+{
+	reset_globals();
+	char dir[] = "/tmp/fluxland-systray-XXXXXX";
+	assert(mkdtemp(dir));
+	g_png_dir = dir;
+
+	touch_test_file(dir, "flat/spotify-test-icon.png");
+	touch_test_file(dir, "themed/hicolor/22x22/apps/only-in-theme.png");
+	touch_test_file(dir, "bare/24x24/status/bare-theme.png");
+	touch_test_file(dir, "both/both-icon.png");
+	touch_test_file(dir, "both/hicolor/22x22/apps/both-icon.png");
+	char flat[600], themed[600], bare[600], both[600];
+	snprintf(flat, sizeof(flat), "%s/flat", dir);
+	snprintf(themed, sizeof(themed), "%s/themed", dir);
+	snprintf(bare, sizeof(bare), "%s/bare", dir);
+	snprintf(both, sizeof(both), "%s/both", dir);
+
+	/* Flat: DIR/name.png */
+	assert(!strcmp(loaded_from(dir, "spotify-test-icon", flat),
+		"flat/spotify-test-icon.png"));
+	/* A theme laid out as hicolor, and one without that directory */
+	assert(!strcmp(loaded_from(dir, "only-in-theme", themed),
+		"themed/hicolor/22x22/apps/only-in-theme.png"));
+	assert(!strcmp(loaded_from(dir, "bare-theme", bare),
+		"bare/24x24/status/bare-theme.png"));
+	/* The file named is the first choice */
+	assert(!strcmp(loaded_from(dir, "both-icon", both),
+		"both/both-icon.png"));
+
+	/* Not there, or not an absolute path: no icon (and no crash) */
+	assert(loaded_from(dir, "not-there-anywhere", flat) == NULL);
+	assert(loaded_from(dir, "spotify-test-icon", "flat") == NULL);
+	assert(loaded_from(dir, "spotify-test-icon", "") == NULL);
+	assert(loaded_from(dir, "spotify-test-icon", NULL) == NULL);
+	/* A name is a file name, never a path out of the directory */
+	assert(loaded_from(dir, "../flat/spotify-test-icon", themed) == NULL);
+
+	g_png_dir = NULL;
+	char cmd[700];
+	snprintf(cmd, sizeof(cmd), "rm -rf %s", dir);
+	assert(system(cmd) == 0);
+	printf("  PASS: test_load_icon_from_item_theme_path\n");
 }
 
 /*
@@ -1742,9 +1835,9 @@ test_register_item_bus_name(void)
 	assert(item != NULL);
 	assert(strcmp(item->object_path, "/StatusNotifierItem") == 0);
 
-	/* query_item_properties should have been called (7 async calls: Id, IconName, IconPixmap, ToolTip, Title, Menu,
-	 * ItemIsMenu) */
-	assert(g_sdbus_call_method_async_count == 7);
+	/* query_item_properties should have been called (8 async calls: Id, IconThemePath, IconName, IconPixmap, ToolTip,
+	 * Title, Menu, ItemIsMenu) */
+	assert(g_sdbus_call_method_async_count == 8);
 
 	destroy_test_systray(systray);
 	printf("  PASS: test_register_item_bus_name\n");
@@ -2052,9 +2145,9 @@ test_query_item_properties(void)
 
 	query_item_properties(systray, item);
 
-	/* Should have made 7 async method calls (Id, IconName, IconPixmap,
-	 * ToolTip, Title, Menu, ItemIsMenu) */
-	assert(g_sdbus_call_method_async_count == 7);
+	/* Should have made 8 async method calls (Id, IconThemePath, IconName,
+	 * IconPixmap, ToolTip, Title, Menu, ItemIsMenu) */
+	assert(g_sdbus_call_method_async_count == 8);
 
 	destroy_test_systray(systray);
 	printf("  PASS: test_query_item_properties\n");
@@ -2363,6 +2456,7 @@ main(void)
 	test_item_update_scene_placeholder();
 	test_load_icon_null_name();
 	test_load_icon_empty_name();
+	test_load_icon_from_item_theme_path();
 	test_buffer_from_cairo_valid();
 	test_buffer_from_cairo_null();
 	test_buffer_from_cairo_zero();

@@ -269,6 +269,31 @@ test_invalid_alpha(void)
 }
 
 static void
+test_dpi_validation(void)
+{
+	write_file(TEST_INIT, "session.dpi: 96\n");
+	struct config_result result;
+	config_result_init(&result);
+	validate_init_file(TEST_INIT, &result);
+	assert(config_result_has_errors(&result) == false);
+	config_result_destroy(&result);
+
+	/* Out of range is a warning, as for every number */
+	write_file(TEST_INIT, "session.dpi: 5000\n");
+	config_result_init(&result);
+	validate_init_file(TEST_INIT, &result);
+	bool found_range = false;
+	for (int i = 0; i < result.count; i++) {
+		if (result.errors[i].message &&
+		    strstr(result.errors[i].message, "out of range"))
+			found_range = true;
+	}
+	assert(found_range);
+	config_result_destroy(&result);
+	printf("  PASS: test_dpi_validation\n");
+}
+
+static void
 test_input_emulation_validation(void)
 {
 	write_file(TEST_INIT,
@@ -1357,6 +1382,7 @@ main(void)
 	test_invalid_alpha();
 	test_invalid_focus_model();
 	test_input_emulation_validation();
+	test_dpi_validation();
 	test_invalid_placement();
 	test_invalid_bool();
 	test_invalid_int();
