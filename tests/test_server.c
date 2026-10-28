@@ -617,6 +617,7 @@ struct wm_server {
 	struct wlr_linux_drm_syncobj_manager_v1 *syncobj_mgr;
 
 	struct wm_toolbar *toolbar;
+	char *toolbar_output_name;
 	struct wm_slit *slit;
 	struct wm_wallpaper *wallpaper;
 	bool style_background;

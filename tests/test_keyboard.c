@@ -721,6 +721,7 @@ enum wm_action {
 	WM_ACTION_FOCUS_UP,
 	WM_ACTION_FOCUS_DOWN,
 	WM_ACTION_SET_HEAD,
+	WM_ACTION_SET_TOOLBAR_HEAD,
 	WM_ACTION_SEND_TO_NEXT_HEAD,
 	WM_ACTION_SEND_TO_PREV_HEAD,
 	WM_ACTION_ARRANGE_STACK_LEFT,
@@ -1351,6 +1352,13 @@ int config_set_resource(struct wm_config *c, const char *k, const char *v)
 }
 
 void wm_toolbar_relayout(struct wm_toolbar *t) { (void)t; stub_toolbar_relayout_count++; }
+static char stub_toolbar_head[64];
+bool wm_toolbar_set_head(struct wm_server *s, const char *arg)
+{
+	(void)s;
+	snprintf(stub_toolbar_head, sizeof(stub_toolbar_head), "%s", arg ? arg : "");
+	return arg && strcmp(arg, "nowhere") != 0;
+}
 void wm_toolbar_toggle_above(struct wm_toolbar *t) { (void)t; stub_toolbar_toggle_above_count++; }
 void wm_toolbar_toggle_visible(struct wm_toolbar *t) { (void)t; stub_toolbar_toggle_visible_count++; }
 void wm_toolbar_update_iconbar(struct wm_toolbar *t) { (void)t; }
@@ -3815,6 +3823,20 @@ test_action_set_head(void)
 	printf("  PASS: test_action_set_head\n");
 }
 
+/* Test SetToolbarHead action: the argument goes to the toolbar, which says
+ * whether there was such an output */
+static void
+test_action_set_toolbar_head(void)
+{
+	setup_with_view();
+	assert(wm_execute_action(&test_server, WM_ACTION_SET_TOOLBAR_HEAD,
+		"HDMI-A-1"));
+	assert(strcmp(stub_toolbar_head, "HDMI-A-1") == 0);
+	assert(!wm_execute_action(&test_server, WM_ACTION_SET_TOOLBAR_HEAD,
+		"nowhere"));
+	printf("  PASS: test_action_set_toolbar_head\n");
+}
+
 /* Test SendToNextHead/SendToPrevHead actions */
 static void
 test_action_send_to_head(void)
@@ -4664,6 +4686,7 @@ main(void)
 	test_action_set_workspace_name_no_arg();
 	test_action_right_left_workspace();
 	test_action_set_head();
+	test_action_set_toolbar_head();
 	test_action_send_to_head();
 	test_action_remember();
 	test_action_remember_no_file();

@@ -175,6 +175,15 @@ void wm_toolbar_reserve(struct wm_toolbar *toolbar, struct wm_output *output,
 /* Recalculate toolbar geometry (call on output resize) */
 void wm_toolbar_relayout(struct wm_toolbar *toolbar);
 
+/*
+ * SetToolbarHead: put the toolbar on an output, given as a connector name
+ * (HDMI-A-1) or as a head number as toolbar.onhead has (from 1), until the
+ * next one or until it is "" or 0 (toolbar.onhead's again).  Unlike a
+ * change of toolbar.onhead it neither rewrites the init nor reconfigures.
+ * False when there is no such enabled output.
+ */
+bool wm_toolbar_set_head(struct wm_server *server, const char *argument);
+
 /* Handle scroll/wheel on toolbar; returns true if consumed */
 bool wm_toolbar_handle_scroll(struct wm_toolbar *toolbar,
 	double lx, double ly, double delta);

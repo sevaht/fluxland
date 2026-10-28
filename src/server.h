@@ -433,6 +433,8 @@ struct wm_server {
 
 	/* Toolbar */
 	struct wm_toolbar *toolbar;
+	/* SetToolbarHead's choice, by connector name; NULL: toolbar.onhead */
+	char *toolbar_output_name;
 
 	/* Slit (dockapp container) */
 	struct wm_slit *slit;

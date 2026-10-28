@@ -43,10 +43,22 @@
 
 /* --- Helper: get primary output --- */
 
-/* The toolbar's head (session.screen0.toolbar.onhead, from 1) */
+/*
+ * The toolbar's output: the one SetToolbarHead chose while it is there and
+ * on, else its head (session.screen0.toolbar.onhead, from 1)
+ */
 static struct wm_output *
 toolbar_output(struct wm_server *server)
 {
+	if (server->toolbar_output_name) {
+		struct wm_output *output;
+		wl_list_for_each(output, &server->outputs, link) {
+			if (!strcmp(output->wlr_output->name,
+				    server->toolbar_output_name) &&
+			    wm_output_head_number(output) > 0)
+				return output;
+		}
+	}
 	return wm_output_by_head(server,
 		server->config ? server->config->toolbar_on_head : 0);
 }
@@ -1561,6 +1573,48 @@ wm_toolbar_update_iconbar(struct wm_toolbar *toolbar)
 
 		iconbar_snapshot_cache(toolbar);
 	}
+}
+
+bool
+wm_toolbar_set_head(struct wm_server *server, const char *argument)
+{
+	if (!server->toolbar)
+		return false;
+	while (argument && (*argument == ' ' || *argument == '\t'))
+		argument++;
+
+	const char *name = NULL;
+	int head;
+	if (!argument || !*argument ||
+	    (safe_atoi(argument, &head) && head == 0)) {
+		/* Back to toolbar.onhead */
+	} else if (safe_atoi(argument, &head)) {
+		struct wm_output *output = wm_output_head(server, head);
+		if (!output)
+			return false;
+		name = output->wlr_output->name;
+	} else {
+		struct wm_output *output;
+		wl_list_for_each(output, &server->outputs, link) {
+			if (!strcmp(output->wlr_output->name, argument) &&
+			    wm_output_head_number(output) > 0) {
+				name = output->wlr_output->name;
+				break;
+			}
+		}
+		if (!name)
+			return false;
+	}
+
+	char *copy = name ? strdup(name) : NULL;
+	if (name && !copy)
+		return false;
+	free(server->toolbar_output_name);
+	server->toolbar_output_name = copy;
+	wm_toolbar_relayout(server->toolbar);
+	/* Windows make room for it where it is now */
+	wm_output_arrange_all(server);
+	return true;
 }
 
 void

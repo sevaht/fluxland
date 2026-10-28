@@ -706,6 +706,8 @@ wm_server_destroy(struct wm_server *server)
 	server->action_result = NULL;
 	wm_toolbar_destroy(server->toolbar);
 	server->toolbar = NULL;
+	free(server->toolbar_output_name);
+	server->toolbar_output_name = NULL;
 	wm_ipc_destroy(&server->ipc);
 	wm_menu_destroy(server->root_menu);
 	wm_menu_destroy(server->window_menu);
