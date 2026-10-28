@@ -307,6 +307,7 @@ wm_sources = files(
   'src/placement.c',
   'src/idle.c',
   'src/layer_shell.c',
+  'src/output_buffer.c',
   'src/output_management.c',
   'src/protocols.c',
   'src/presentation.c',
