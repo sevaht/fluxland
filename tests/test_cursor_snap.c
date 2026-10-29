@@ -778,6 +778,7 @@ struct wm_view {
 	bool lhalf;
 	bool rhalf;
 	struct wm_tile { bool active; int x, y, w, h; } tile;
+	struct wm_tile snap_return;
 	bool show_decoration;
 	char *title;
 	char *app_id;
@@ -1193,6 +1194,21 @@ static void
 wlr_scene_node_set_enabled(struct wlr_scene_node *node, bool enabled)
 {
 	if (node) node->enabled = enabled;
+}
+
+static int g_node_place_below_count;
+static void
+wlr_scene_node_reparent(struct wlr_scene_node *node,
+	struct wlr_scene_tree *parent)
+{
+	node->parent = parent;
+}
+static void
+wlr_scene_node_place_below(struct wlr_scene_node *node,
+	struct wlr_scene_node *sibling)
+{
+	(void)node; (void)sibling;
+	g_node_place_below_count++;
 }
 
 static void

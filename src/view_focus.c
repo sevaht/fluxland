@@ -548,6 +548,83 @@ modifiers_held(struct wm_server *server)
 		~(WLR_MODIFIER_CAPS | WLR_MODIFIER_MOD2)) != 0;
 }
 
+/* The modifiers held, not counting the locks */
+static uint32_t
+held_modifiers(struct wm_server *server)
+{
+	struct wlr_keyboard *kb = wlr_seat_get_keyboard(server->seat);
+	if (!kb)
+		return 0;
+	return wlr_keyboard_get_modifiers(kb) &
+		~(WLR_MODIFIER_CAPS | WLR_MODIFIER_MOD2);
+}
+
+void
+wm_snap_step_minimized(struct wm_view *view)
+{
+	struct wm_server *server = view->server;
+	uint32_t mods = held_modifiers(server);
+	/* Nothing held, nothing to undo it while */
+	server->snap_step.view = mods ? view : NULL;
+	server->snap_step.mods = mods;
+}
+
+void wm_snap_step_forget(struct wm_server *server);
+
+bool
+wm_snap_step_pending(struct wm_server *server)
+{
+	struct wm_view *view = server->snap_step.view;
+	if (!view)
+		return false;
+	if (!view->mapped || !view->scene_tree ||
+	    view->scene_tree->node.enabled ||
+	    (held_modifiers(server) & server->snap_step.mods) !=
+	    server->snap_step.mods) {
+		wm_snap_step_forget(server);
+		return false;
+	}
+	return true;
+}
+
+bool
+wm_snap_step_restore(struct wm_server *server)
+{
+	struct wm_view *view = server->snap_step.view;
+	if (!view)
+		return false;
+	uint32_t mods = server->snap_step.mods;
+	server->snap_step.view = NULL;
+	server->snap_step.mods = 0;
+	/* Still minimized, and the keys that were down still are */
+	if (!view->mapped || !view->scene_tree ||
+	    view->scene_tree->node.enabled ||
+	    (held_modifiers(server) & mods) != mods)
+		return false;
+
+	server->focus_user_initiated = true;
+	if (!view->sticky && view->workspace &&
+	    view->workspace != wm_workspace_get_active(server))
+		wm_workspace_switch(server, view->workspace->index);
+	deiconify_view(view);
+	return true;
+}
+
+void
+wm_snap_step_forget(struct wm_server *server)
+{
+	server->snap_step.view = NULL;
+	server->snap_step.mods = 0;
+}
+
+void
+wm_snap_step_modifiers_changed(struct wm_server *server, uint32_t held)
+{
+	if (server->snap_step.view &&
+	    (held & server->snap_step.mods) != server->snap_step.mods)
+		wm_snap_step_forget(server);
+}
+
 void
 wm_focus_cycle_end(struct wm_server *server)
 {

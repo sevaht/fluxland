@@ -29,8 +29,9 @@ struct wm_snap_picker_geom {
 /*
  * Lay the layouts of config out on a head with the given usable area, the
  * panel centred at the top just below the snap zone: thumbnails of
- * config->snap_layout_picker_size wide (16:10), in as many rows as the head
- * is wide enough for.  False when there is nothing to show.
+ * config->snap_layout_picker_size wide (16:10), config->snap_layout_picker_
+ * columns to a row (or as many as the head is wide enough for).  False when
+ * there is nothing to show.
  */
 bool wm_snap_picker_geometry(const struct wm_config *config,
 	const struct wlr_box *usable, struct wm_snap_picker_geom *geom);

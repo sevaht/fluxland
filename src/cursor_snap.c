@@ -313,6 +313,23 @@ snap_preview_destroy(struct wm_server *server)
 }
 
 /*
+ * The preview is above every window but the one being dragged, which stays
+ * over it (as on Windows): in the dragged window's own tree, just under it.
+ */
+static void
+snap_preview_stack(struct wm_server *server)
+{
+	struct wm_view *view = server->grabbed_view;
+	if (!server->snap_preview || !view || !view->scene_tree ||
+	    !view->scene_tree->node.parent)
+		return;
+	struct wlr_scene_node *node = &server->snap_preview->node;
+	if (node->parent != view->scene_tree->node.parent)
+		wlr_scene_node_reparent(node, view->scene_tree->node.parent);
+	wlr_scene_node_place_below(node, &view->scene_tree->node);
+}
+
+/*
  * Create or update the snap preview overlay showing the target zone.
  * Renders a semi-transparent rectangle with a border outline.
  */
@@ -361,6 +378,7 @@ snap_preview_update(struct wm_server *server, struct wlr_box *box)
 	if (server->snap_preview) {
 		wlr_scene_node_set_position(
 			&server->snap_preview->node, box->x, box->y);
+		snap_preview_stack(server);
 	}
 }
 

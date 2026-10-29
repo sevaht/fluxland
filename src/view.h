@@ -108,6 +108,8 @@ struct wm_view {
 		bool active;
 		int x, y, w, h;
 	} tile;
+	/* SnapStep maximized it from this corner: down goes back to it */
+	struct wm_tile snap_return;
 
 	/* Decoration visibility toggle */
 	bool show_decoration; /* default true */
@@ -345,6 +347,32 @@ void wm_focus_cycle(struct wm_server *server,
 
 /* End a cycle (all modifiers released): commit the focus order. */
 void wm_focus_cycle_end(struct wm_server *server);
+
+/*
+ * SnapStep down minimized the view: if modifiers are held, remember it, so
+ * that SnapStep up (wm_snap_step_restore()) can undo it for as long as they
+ * all stay held.  The modifiers that were held are those that matter, not the
+ * ones the other binding uses.
+ */
+void wm_snap_step_minimized(struct wm_view *view);
+
+/*
+ * Whether a SnapStep minimize can still be undone: while it can, the keys
+ * are about that window and not about whichever one has focus now (the same
+ * as Windows, where nothing but up does anything until the modifier is let go)
+ */
+bool wm_snap_step_pending(struct wm_server *server);
+
+/* Restore the window SnapStep minimized, if the modifiers are still held:
+ * true when it did (and there is nothing more for the key to do) */
+bool wm_snap_step_restore(struct wm_server *server);
+
+/* Forget it: a modifier was released, the window went, or another step began */
+void wm_snap_step_forget(struct wm_server *server);
+
+/* A modifier was released: forget the minimized window if one it needed went */
+void wm_snap_step_modifiers_changed(struct wm_server *server,
+	uint32_t held);
 
 /*
  * Restore (de-iconify) the most recently minimized view on the

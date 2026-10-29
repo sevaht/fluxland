@@ -251,6 +251,7 @@ struct wm_config {
 	/* The layout picker of a window dragged to the top edge */
 	bool snap_layout_picker;	/* session.screen0.snapLayoutPicker */
 	int snap_layout_picker_size;	/* a layout's width, in pixels */
+	int snap_layout_picker_columns;	/* in a row; 0: as many as fit */
 	int snap_layout_count;
 	struct wm_snap_layout snap_layouts[WM_SNAP_LAYOUTS_MAX];
 	int toolbar_layer;

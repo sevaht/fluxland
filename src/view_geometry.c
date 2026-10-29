@@ -269,6 +269,7 @@ wm_view_toggle_maximize(struct wm_view *view)
 		view->x = view->saved_geometry.x;
 		view->y = view->saved_geometry.y;
 		view->maximized = false;
+		view->snap_return.active = false;
 	} else {
 		/* Save current geometry and maximize */
 		wm_view_get_geometry(view, &view->saved_geometry);
@@ -567,6 +568,7 @@ wm_view_clear_maximized(struct wm_view *view)
 	view->lhalf = false;
 	view->rhalf = false;
 	view->tile.active = false;
+	view->snap_return.active = false;
 	/* Only a full maximize is a state the client knows of; the size it
 	 * has stays the one it was given */
 	if (was_maximized) {
@@ -847,7 +849,32 @@ adjacent_head(struct wm_view *view, int side)
 			best_gap = gap;
 		}
 	}
-	return best;
+	if (best)
+		return best;
+
+	/*
+	 * None that way: round to the other end, as Windows does (right of the
+	 * rightmost head is the leftmost, and the other way): the head that is
+	 * furthest the other way among those sharing some height.  The same
+	 * head, when there is no other, is no wrap.
+	 */
+	struct wm_output *far = NULL;
+	int far_edge = 0;
+	wl_list_for_each(out, &view->server->outputs, link) {
+		struct wlr_box o;
+		if (out == cur)
+			continue;
+		wm_output_layout_box(out, &o);
+		if (wlr_box_empty(&o) || o.y >= box.y + box.height ||
+		    o.y + o.height <= box.y)
+			continue;
+		int edge = side < 0 ? o.x + o.width : o.x;
+		if (!far || (side < 0 ? edge > far_edge : edge < far_edge)) {
+			far = out;
+			far_edge = edge;
+		}
+	}
+	return far;
 }
 
 /*
@@ -896,8 +923,23 @@ snap_adopt(struct wm_view *view)
 	}
 }
 
+/* Maximize a window that holds a corner, remembering the corner: down goes
+ * back to it, and the size from before the snap stays what it goes back to */
+static void
+snap_maximize_from_cell(struct wm_view *view)
+{
+	struct wm_tile cell = view->tile;
+	struct wlr_box saved = view->saved_geometry;
+	wm_view_clear_maximized(view);
+	wm_view_toggle_maximize(view);
+	view->saved_geometry = saved;
+	if (view->maximized)
+		view->snap_return = cell;
+}
+
 bool
-wm_view_snap_step(struct wm_view *view, const char *direction)
+wm_view_snap_step(struct wm_server *server, struct wm_view *view,
+	const char *direction)
 {
 	if (!direction)
 		return false;
@@ -912,6 +954,19 @@ wm_view_snap_step(struct wm_view *view, const char *direction)
 		dy = 1;
 	else
 		return false;
+
+	/*
+	 * Up, while the keys that went down for a minimize are still down, takes
+	 * the minimize back.  Any other key then is about that window too, which
+	 * is gone from sight: nothing is done, and certainly not to the window
+	 * that has the focus now, until the modifier is let go
+	 */
+	if (dy < 0) {
+		if (wm_snap_step_restore(server))
+			return true;
+	} else if (wm_snap_step_pending(server)) {
+		return true;
+	}
 	if (!view || !wm_view_surface(view) || !view->scene_tree->node.enabled ||
 	    view->fullscreen)
 		return true;
@@ -943,15 +998,33 @@ wm_view_snap_step(struct wm_view *view, const char *direction)
 	} else if (dy < 0) {
 		if (plain)
 			wm_view_toggle_maximize(view);
+		else if (side && row == -1)
+			snap_maximize_from_cell(view);
 		else if (side && row >= 0)
 			snap_to(view, side, row - 1);
 	} else {
-		if (view->maximized)
-			wm_view_toggle_maximize(view);
-		else if (side && row <= 0)
+		if (view->maximized) {
+			if (view->snap_return.active) {
+				/* Up undone: back to the corner it was in */
+				struct wm_tile cell = view->snap_return;
+				struct wlr_box saved = view->saved_geometry;
+				wm_view_clear_maximized(view);
+				wm_view_tile(view, cell.x, cell.y, cell.w,
+					cell.h);
+				view->saved_geometry = saved;
+			} else {
+				wm_view_toggle_maximize(view);
+			}
+		} else if (side && row == 0) {
 			snap_to(view, side, row + 1);
-		else if (plain)
+		} else if (side && row < 0) {
+			snap_to(view, side, row + 1);
+		} else if (plain || (side && row > 0)) {
+			/* Not snapped, or in a bottom corner: down goes no
+			 * further than out of sight, which is undone by up */
 			wm_view_minimize(view);
+			wm_snap_step_minimized(view);
+		}
 	}
 	return true;
 }

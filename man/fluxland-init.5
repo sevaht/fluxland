@@ -237,12 +237,17 @@ a cell of one tiles it there, dropping it on the edge itself still maximizes
 .B session.screen0.snapLayoutPickerSize
 The width in pixels of each layout's thumbnail, 60 to 300 (default: 120).
 .TP
+.B session.screen0.snapLayoutPickerColumns
+How many layouts to a row of the picker, 0 to 12; 0 is as many as fit the
+head (default: 4, which makes two rows of the eight default layouts).
+.TP
 .B session.screen0.snapLayouts
 The layouts of the picker: layouts separated by \fB;\fR, each a list of cells
 \fIx,y,width,height\fR in percent of the head's usable area (decimals
 allowed), up to 12 layouts of 8 cells.  Cells that do not fit in the head are
-skipped.  Unset, there are seven: two columns, 2/3 and 1/3, 1/3 and 2/3,
-three columns, 25/50/25, a big cell with two beside it, and four quarters.
+skipped.  Unset, there are eight, in two rows of four: 2/3 and 1/3, two
+columns, 1/3 and 2/3, and top and bottom; then 25/50/25, three columns, a big
+cell with two beside it, and four quarters.
 Example: \fB0,0,50,100 50,0,50,100; 0,0,100,50 0,50,100,50\fR.
 .TP
 .B session.screen0.showWindowPosition

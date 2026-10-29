@@ -397,3 +397,62 @@ def test_a_drag_snap_restores_to_where_the_drag_began(comp, ipc):
         assert abs(back["frame"]["y"] - first[1]) <= 2
         ipc.command("CloseAllWindows")
         time.sleep(0.3)
+
+
+def test_snap_step_wraps_round_to_the_other_end(ipc):
+    a = usable(ipc, "HEADLESS-2")	# on the left
+    b = usable(ipc, "HEADLESS-1")	# on the right
+    win = open_on_head1(ipc, "StepWrap")
+    ipc.command("SetHead 2", window=win["id"])
+    time.sleep(SETTLE)
+
+    assert frame_tuple(step(ipc, win, "right")) == cell(b, 500, 1000)
+    # right of the rightmost head: round to the leftmost, its left half
+    assert frame_tuple(step(ipc, win, "right")) == cell(a, 0, 500)
+    # and the other way, from the left of the leftmost
+    assert frame_tuple(step(ipc, win, "left")) == cell(b, 500, 1000)
+
+
+def test_snap_step_a_top_corner_maximizes_and_down_goes_back(ipc):
+    a = usable(ipc, "HEADLESS-2")
+    win = open_on_head1(ipc, "StepCorner")
+    before = frame_tuple(win)
+
+    step(ipc, win, "left")
+    assert frame_tuple(step(ipc, win, "up")) == cell(a, 0, 500, 0, 500)
+    now = step(ipc, win, "up")
+    assert now["maximized"] is True
+    # down undoes it: the corner it came from, not the middle state
+    back = step(ipc, win, "down")
+    assert back["maximized"] is False
+    assert frame_tuple(back) == cell(a, 0, 500, 0, 500)
+    # and the ladder goes on as before: the half, then undoing the snap
+    assert frame_tuple(step(ipc, win, "down")) == cell(a, 0, 500)
+    assert frame_tuple(step(ipc, win, "right")) == before
+
+
+def test_snap_step_maximize_by_other_means_forgets_the_corner(ipc):
+    a = usable(ipc, "HEADLESS-2")
+    win = open_on_head1(ipc, "StepForget")
+    step(ipc, win, "left")
+    step(ipc, win, "up")
+    assert step(ipc, win, "up")["maximized"] is True
+    # unmaximized by the Maximize action (not by down): the memory goes
+    ipc.command("Maximize", window=win["id"])
+    time.sleep(SETTLE)
+    assert ipc.get_window_by_app_id("StepForget")["maximized"] is False
+    # maximized the plain way and down: restores, not to the old corner
+    ipc.command("Maximize", window=win["id"])
+    time.sleep(SETTLE)
+    back = step(ipc, win, "down")
+    assert back["maximized"] is False
+    assert frame_tuple(back) != cell(a, 0, 500, 0, 500)
+
+
+def test_snap_step_down_in_a_bottom_corner_minimizes(ipc):
+    win = open_on_head1(ipc, "StepBottom")
+    step(ipc, win, "left")
+    step(ipc, win, "down")	# the bottom corner
+    ipc.command("SnapStep down", window=win["id"])
+    time.sleep(SETTLE)
+    assert ipc.get_window_by_app_id("StepBottom")["minimized"] is True

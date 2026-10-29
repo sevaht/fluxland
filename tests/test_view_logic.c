@@ -703,6 +703,7 @@ struct wm_view {
 	bool lhalf;
 	bool rhalf;
 	struct wm_tile { bool active; int x, y, w, h; } tile;
+	struct wm_tile snap_return;
 	bool show_decoration;
 	char *title;
 	bool title_override;
@@ -854,6 +855,10 @@ struct wm_server {
 		bool active;
 		struct wm_view *restore_minimized;
 	} focus_cycle;
+	struct {
+		struct wm_view *view;
+		uint32_t mods;
+	} snap_step;
 	uint64_t focus_seq_counter;
 	struct wl_list pending_commands;
 	struct wl_event_source *auto_raise_timer;
@@ -4397,6 +4402,88 @@ test_set_app_id_stored(void)
 	printf("  PASS: set_app_id_stored\n");
 }
 
+/* ===== SnapStep: the undo of a minimize while its modifiers are held ===== */
+
+static void
+test_snap_step_minimize_undo(void)
+{
+	init_test_server();
+	setup_mock_view(0, &test_workspace);
+	test_config.animate_minimize = false;
+	g_seat_has_keyboard = true;
+	struct wm_view *v = &test_views[0];
+
+	/* No modifier held: nothing is remembered to undo */
+	g_kb_modifiers = 0;
+	wm_snap_step_minimized(v);
+	assert(test_server.snap_step.view == NULL);
+
+	/* Super held while it was minimized: remembered, with Super */
+	g_kb_modifiers = WLR_MODIFIER_LOGO | WLR_MODIFIER_CAPS;
+	wm_snap_step_minimized(v);
+	assert(test_server.snap_step.view == v);
+	assert(test_server.snap_step.mods == WLR_MODIFIER_LOGO);  /* no locks */
+
+	/* It is not minimized (shown): nothing to restore */
+	assert(!wm_snap_step_restore(&test_server));
+	assert(test_server.snap_step.view == NULL);
+
+	/* Minimized, Super still held (and Shift too: extra is fine) */
+	v->scene_tree->node.enabled = false;
+	g_kb_modifiers = WLR_MODIFIER_LOGO;
+	wm_snap_step_minimized(v);
+	g_kb_modifiers = WLR_MODIFIER_LOGO | WLR_MODIFIER_SHIFT;
+	assert(wm_snap_step_restore(&test_server));
+	assert(v->scene_tree->node.enabled == true);
+	assert(test_server.focused_view == v);
+	assert(test_server.snap_step.view == NULL);
+
+	/* Super was let go in between: no */
+	v->scene_tree->node.enabled = false;
+	g_kb_modifiers = WLR_MODIFIER_LOGO;
+	wm_snap_step_minimized(v);
+	g_kb_modifiers = 0;
+	wm_snap_step_modifiers_changed(&test_server, g_kb_modifiers);
+	assert(test_server.snap_step.view == NULL);
+	assert(!wm_snap_step_restore(&test_server));
+	assert(v->scene_tree->node.enabled == false);
+
+	/* Two modifiers went down; letting go of either ends it */
+	g_kb_modifiers = WLR_MODIFIER_LOGO | WLR_MODIFIER_CTRL;
+	wm_snap_step_minimized(v);
+	wm_snap_step_modifiers_changed(&test_server, WLR_MODIFIER_LOGO |
+		WLR_MODIFIER_CTRL | WLR_MODIFIER_SHIFT);
+	assert(test_server.snap_step.view == v);
+	wm_snap_step_modifiers_changed(&test_server, WLR_MODIFIER_LOGO);
+	assert(test_server.snap_step.view == NULL);
+
+	/* While it can be undone it is pending: other keys are about it */
+	v->scene_tree->node.enabled = false;
+	g_kb_modifiers = WLR_MODIFIER_LOGO;
+	wm_snap_step_minimized(v);
+	assert(wm_snap_step_pending(&test_server));
+	assert(wm_snap_step_pending(&test_server));	/* asking changes nothing */
+	/* no longer once it was let go, or the window is shown again */
+	g_kb_modifiers = 0;
+	assert(!wm_snap_step_pending(&test_server));
+	assert(test_server.snap_step.view == NULL);
+	g_kb_modifiers = WLR_MODIFIER_LOGO;
+	wm_snap_step_minimized(v);
+	v->scene_tree->node.enabled = true;
+	assert(!wm_snap_step_pending(&test_server));
+
+	/* Another step begins: forgotten */
+	g_kb_modifiers = WLR_MODIFIER_LOGO;
+	wm_snap_step_minimized(v);
+	wm_snap_step_forget(&test_server);
+	assert(test_server.snap_step.view == NULL);
+
+	g_kb_modifiers = 0;
+	g_seat_has_keyboard = false;
+	wl_list_remove(&v->link);
+	printf("  PASS: snap_step_minimize_undo\n");
+}
+
 /* ===== deiconify_view tests ===== */
 
 static void
@@ -5957,6 +6044,7 @@ main(void)
 	test_set_app_id_stored();
 
 	/* deiconify_view */
+	test_snap_step_minimize_undo();
 	test_deiconify_view_basic();
 	test_deiconify_view_with_animation();
 

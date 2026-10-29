@@ -959,6 +959,7 @@ struct wm_view {
 	bool lhalf;
 	bool rhalf;
 	struct wm_tile { bool active; int x, y, w, h; } tile;
+	struct wm_tile snap_return;
 	bool show_decoration;
 	char *title;
 	bool title_override;
@@ -1057,6 +1058,10 @@ struct wm_server {
 		bool active;
 		struct wm_view *restore_minimized;
 	} focus_cycle;
+	struct {
+		struct wm_view *view;
+		uint32_t mods;
+	} snap_step;
 	uint64_t focus_seq_counter;
 	struct wl_list pending_commands;
 	bool show_position;
@@ -1247,7 +1252,7 @@ void wm_pseudo_update(struct wm_view *v) { (void)v; stub_pseudo_update_count++; 
 bool wm_view_pseudo_transparent(const struct wm_view *v)
 { return v->pseudo_rule == 1; }
 static int stub_snap_step_count;
-bool wm_view_snap_step(struct wm_view *v, const char *d)
+bool wm_view_snap_step(struct wm_server *s, struct wm_view *v, const char *d)
 { (void)v; stub_snap_step_count++; return d != NULL; }
 void wm_view_tile(struct wm_view *v, int x, int y, int w, int h)
 {
@@ -1361,6 +1366,10 @@ void wm_view_get_geometry(struct wm_view *v, struct wlr_box *b) { (void)v; b->x 
 void wm_tab_group_activate(struct wm_tab_group *g, struct wm_view *v) { (void)g; (void)v; }
 static int stub_cycle_end_count;
 void wm_focus_cycle_end(struct wm_server *s) { (void)s; stub_cycle_end_count++; }
+static int stub_snap_modifiers_count;
+static uint32_t stub_snap_modifiers_held;
+void wm_snap_step_modifiers_changed(struct wm_server *s, uint32_t held)
+{ (void)s; stub_snap_modifiers_count++; stub_snap_modifiers_held = held; }
 void wm_decoration_set_preset(struct wm_decoration *d, enum wm_decor_preset p, struct wm_style *s) { (void)d; (void)p; (void)s; stub_decoration_set_preset_count++; }
 void wm_decoration_set_shaded(struct wm_decoration *d, bool shaded, struct wm_style *s) { (void)d; (void)s; stub_decoration_set_shaded_count++; stub_decoration_shaded_value = shaded; }
 

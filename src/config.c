@@ -563,14 +563,19 @@ wm_config_setup_files(const char *datadir)
 	return copied;
 }
 
-/* Two equal columns, 2/3 and 1/3, 1/3 and 2/3, three columns, a wide middle,
- * a big cell with two beside it, four quarters */
+/*
+ * In two rows of four (snapLayoutPickerColumns): the splits in two, left
+ * heavy, even, right heavy, and top and bottom; then three or more panes,
+ * a wide middle, three columns, a big cell with two beside it, four quarters.
+ * The even splits are above each other in the second column.
+ */
 #define WM_SNAP_LAYOUTS_DEFAULT \
-	"0,0,50,100 50,0,50,100;" \
 	"0,0,66.7,100 66.7,0,33.3,100;" \
+	"0,0,50,100 50,0,50,100;" \
 	"0,0,33.3,100 33.3,0,66.7,100;" \
-	"0,0,33.3,100 33.3,0,33.4,100 66.7,0,33.3,100;" \
+	"0,0,100,50 0,50,100,50;" \
 	"0,0,25,100 25,0,50,100 75,0,25,100;" \
+	"0,0,33.3,100 33.3,0,33.4,100 66.7,0,33.3,100;" \
 	"0,0,50,100 50,0,50,50 50,50,50,50;" \
 	"0,0,50,50 50,0,50,50 0,50,50,50 50,50,50,50"
 
@@ -937,6 +942,12 @@ apply_window_config(struct wm_config *config, struct rc_database *db)
 		config->snap_layout_picker_size = 60;
 	if (config->snap_layout_picker_size > 300)
 		config->snap_layout_picker_size = 300;
+	config->snap_layout_picker_columns =
+		rc_get_int(db, "session.screen0.snapLayoutPickerColumns", 4);
+	if (config->snap_layout_picker_columns < 0)
+		config->snap_layout_picker_columns = 0;
+	if (config->snap_layout_picker_columns > WM_SNAP_LAYOUTS_MAX)
+		config->snap_layout_picker_columns = WM_SNAP_LAYOUTS_MAX;
 	config->snap_layout_count = 0;
 	const char *layouts = rc_get_string(db, "session.screen0.snapLayouts");
 	if (layouts)

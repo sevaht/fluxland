@@ -1856,15 +1856,25 @@ test_snap_layouts(void)
 	config_load(c, TEST_INIT);
 	assert(c->snap_layout_picker == false);
 	assert(c->snap_layout_picker_size == 120);
-	assert(c->snap_layout_count == 7);
+	assert(c->snap_layout_picker_columns == 4);
+	assert(c->snap_layout_count == 8);
+	/* the splits in two: left heavy, even, right heavy, top and bottom */
 	assert(c->snap_layouts[0].cell_count == 2);
-	assert(c->snap_layouts[0].cells[1].x == 500);
-	assert(c->snap_layouts[3].cell_count == 3);
-	assert(c->snap_layouts[6].cell_count == 4);
+	assert(c->snap_layouts[0].cells[1].x == 667);
+	assert(c->snap_layouts[1].cell_count == 2);
+	assert(c->snap_layouts[1].cells[1].x == 500);
+	assert(c->snap_layouts[2].cells[1].x == 333);
+	assert(c->snap_layouts[3].cell_count == 2);
+	assert(c->snap_layouts[3].cells[1].y == 500 &&
+		c->snap_layouts[3].cells[1].w == 1000);
+	/* then three or more panes: the even thirds are under the even halves */
+	assert(c->snap_layouts[4].cell_count == 3);
+	assert(c->snap_layouts[5].cell_count == 3);
+	assert(c->snap_layouts[7].cell_count == 4);
 	/* thirds meet with no gap and no overlap */
-	assert(c->snap_layouts[3].cells[0].x + c->snap_layouts[3].cells[0].w ==
-		c->snap_layouts[3].cells[1].x);
-	assert(c->snap_layouts[3].cells[2].x + c->snap_layouts[3].cells[2].w ==
+	assert(c->snap_layouts[5].cells[0].x + c->snap_layouts[5].cells[0].w ==
+		c->snap_layouts[5].cells[1].x);
+	assert(c->snap_layouts[5].cells[2].x + c->snap_layouts[5].cells[2].w ==
 		1000);
 	config_destroy(c);
 
@@ -1889,7 +1899,24 @@ test_snap_layouts(void)
 	write_file(TEST_INIT, "session.screen0.snapLayouts: junk\n");
 	c = config_create();
 	config_load(c, TEST_INIT);
-	assert(c->snap_layout_count == 7);
+	assert(c->snap_layout_count == 8);
+	config_destroy(c);
+
+	/* the columns of the picker: set, clamped, and 0 for as many as fit */
+	write_file(TEST_INIT, "session.screen0.snapLayoutPickerColumns: 3\n");
+	c = config_create();
+	config_load(c, TEST_INIT);
+	assert(c->snap_layout_picker_columns == 3);
+	config_destroy(c);
+	write_file(TEST_INIT, "session.screen0.snapLayoutPickerColumns: 99\n");
+	c = config_create();
+	config_load(c, TEST_INIT);
+	assert(c->snap_layout_picker_columns == 12);
+	config_destroy(c);
+	write_file(TEST_INIT, "session.screen0.snapLayoutPickerColumns: 0\n");
+	c = config_create();
+	config_load(c, TEST_INIT);
+	assert(c->snap_layout_picker_columns == 0);
 	config_destroy(c);
 
 	printf("  PASS: test_snap_layouts\n");

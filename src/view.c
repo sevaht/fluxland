@@ -675,6 +675,8 @@ wm_view_unmap_common(struct wm_view *view)
 		view->server->config ? view->server->config->apps_file : NULL);
 	if (view->server->focus_cycle.restore_minimized == view)
 		view->server->focus_cycle.restore_minimized = NULL;
+	if (view->server->snap_step.view == view)
+		wm_snap_step_forget(view->server);
 
 	/* Cancel any running fade-in animation */
 	if (view->animation)
@@ -768,6 +770,8 @@ wm_view_destroy_common(struct wm_view *view)
 	}
 	if (view->server->focus_cycle.restore_minimized == view)
 		view->server->focus_cycle.restore_minimized = NULL;
+	if (view->server->snap_step.view == view)
+		wm_snap_step_forget(view->server);
 	if (view->server->menu_view == view)
 		view->server->menu_view = NULL;
 

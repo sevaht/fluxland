@@ -73,6 +73,45 @@ test_geometry_wraps_on_a_narrow_head(void)
 }
 
 static void
+test_rows_of_the_columns_asked_for(void)
+{
+	struct wm_config c = two_columns();
+	c.snap_layout_count = 8;
+	for (int i = 1; i < 8; i++)
+		c.snap_layouts[i] = c.snap_layouts[0];
+	struct wlr_box usable = { 0, 0, 1920, 1080 };
+	struct wm_snap_picker_geom g;
+
+	/* four to a row: two rows of four, though the head has room for eight */
+	c.snap_layout_picker_columns = 4;
+	assert(wm_snap_picker_geometry(&c, &usable, &g));
+	assert(g.thumbs[3].y == g.thumbs[0].y);
+	assert(g.thumbs[4].y > g.thumbs[0].y);
+	assert(g.thumbs[4].x == g.thumbs[0].x);
+	assert(g.thumbs[7].y == g.thumbs[4].y);
+	/* the second row is under the first, in the same columns */
+	for (int i = 0; i < 4; i++)
+		assert(g.thumbs[i + 4].x == g.thumbs[i].x);
+	/* the panel is centred, and as wide as four */
+	assert(g.panel.width == 4 * 120 + 3 * WM_SNAP_PICKER_PAD +
+		2 * WM_SNAP_PICKER_PAD);
+	assert(g.panel.x == (1920 - g.panel.width) / 2);
+
+	/* none asked for: as many as fit, here all eight in a row */
+	c.snap_layout_picker_columns = 0;
+	assert(wm_snap_picker_geometry(&c, &usable, &g));
+	assert(g.thumbs[7].y == g.thumbs[0].y);
+
+	/* more than fit: as many as do */
+	c.snap_layout_picker_columns = 8;
+	struct wlr_box narrow = { 0, 0, 600, 600 };
+	assert(wm_snap_picker_geometry(&c, &narrow, &g));
+	assert(g.thumbs[7].y > g.thumbs[0].y);
+	assert(g.panel.x >= 0 && g.panel.x + g.panel.width <= 600);
+	printf("  PASS: test_rows_of_the_columns_asked_for\n");
+}
+
+static void
 test_nothing_to_show(void)
 {
 	struct wm_config c = two_columns();
@@ -125,6 +164,7 @@ main(void)
 	printf("test_snap_picker:\n");
 	test_geometry_centred_below_the_zone();
 	test_geometry_wraps_on_a_narrow_head();
+	test_rows_of_the_columns_asked_for();
 	test_nothing_to_show();
 	test_hit_and_target();
 	printf("All snap_picker tests passed.\n");

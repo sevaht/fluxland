@@ -85,7 +85,8 @@ void wm_view_tile(struct wm_view *view, int x, int y, int w, int h);
  * and a top quarter a half, and minimizes any other.  False for a direction
  * that is none.
  */
-bool wm_view_snap_step(struct wm_view *view, const char *direction);
+bool wm_view_snap_step(struct wm_server *server, struct wm_view *view,
+	const char *direction);
 
 /*
  * A maximized window dragged by hand is pulled off its maximize: it

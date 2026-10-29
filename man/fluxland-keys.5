@@ -260,13 +260,23 @@ arrow does (a fluxland extension).
 and
 .B right
 snap it to that half of its head; at that half already, it goes on to the
-next head in that direction, onto the other half; snapped to the other side,
-it is put back.
+next head in that direction, onto the other half, and past the last head
+round to the first (from the right of the rightmost to the left of the
+leftmost, and the other way); snapped to the other side, it is put back.
 .B up
-maximizes, or turns a half into a top quarter;
+maximizes, or turns a half into a top quarter and a top quarter into a
+maximized window.
 .B down
-restores a maximized window, turns a half into a bottom quarter and a top
-quarter into a half, and minimizes a window that is not snapped.
+undoes that: a window maximized from a top corner goes back to the corner, any
+other maximized window is restored, a half becomes a bottom quarter and a top
+quarter a half, and a window that is not snapped, or is in a bottom corner, is
+minimized.  A window minimized so is restored by
+.B up
+as long as the modifiers held when it was minimized are still held (an
+accidental minimize), whatever the modifiers of the binding of
+.B up
+are.  Until they are let go of, the other directions do nothing: they are
+about the minimized window, not the one that has the focus now.
 .TP
 .BR Shade " (" ShadeWindow "), " ShadeOn ", " ShadeOff ", " Stick " (" StickWindow )
 .TP

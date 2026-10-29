@@ -39,7 +39,12 @@ wm_snap_picker_geometry(const struct wm_config *config,
 		tw = 20;
 	int th = tw * 10 / 16;
 
-	int cols = (room + pad) / (tw + pad);
+	/* As many in a row as asked for, or as fit, and no more than there are */
+	int fit = (room + pad) / (tw + pad);
+	int cols = config->snap_layout_picker_columns > 0 ?
+		config->snap_layout_picker_columns : fit;
+	if (cols > fit)
+		cols = fit;
 	if (cols < 1)
 		cols = 1;
 	if (cols > count)

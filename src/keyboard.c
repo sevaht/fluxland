@@ -465,6 +465,10 @@ handle_modifiers(struct wl_listener *listener, void *data)
 			&keyboard->wlr_keyboard->modifiers);
 	}
 
+	/* A modifier let go ends the grace to undo a SnapStep minimize */
+	wm_snap_step_modifiers_changed(server,
+		wlr_keyboard_get_modifiers(keyboard->wlr_keyboard));
+
 	/* Releasing the modifiers ends a NextWindow/PrevWindow cycle */
 	if (server->focus_cycle.active &&
 	    !(wlr_keyboard_get_modifiers(keyboard->wlr_keyboard) &

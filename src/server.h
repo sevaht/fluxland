@@ -250,6 +250,15 @@ struct wm_server {
 		bool active;
 		struct wm_view *restore_minimized; /* de-iconified by cycling */
 	} focus_cycle;
+	/*
+	 * SnapStep down minimized this window while these modifiers were held:
+	 * SnapStep up restores it for as long as they stay held (Windows' undo
+	 * of a minimize by accident).
+	 */
+	struct {
+		struct wm_view *view;
+		uint32_t mods;	/* enum wlr_keyboard_modifier bits */
+	} snap_step;
 	uint64_t focus_seq_counter;
 
 	/* Auto-raise timer for focus-follows-mouse modes */
