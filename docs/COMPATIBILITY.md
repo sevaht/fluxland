@@ -341,3 +341,8 @@ Fluxbox's own styles. See [STYLES.md](STYLES.md).
   the mouse.  `SnapStep left|right|up|down` steps a window through halves,
   quarters, maximize and the next head like the Windows key with an arrow.
   Fluxbox has none of these; with all unused nothing differs.
+- **Pseudo-transparency (extension).** `session.screen0.pseudoTransparency`, the
+  `[PseudoTransparent]` apps attribute and the `PseudoTransparent` action make a
+  translucent window show the wallpaper behind it rather than the windows
+  below it, as Fluxbox's root-pixmap pseudo-transparency does on X11.  Off
+  unless asked for.

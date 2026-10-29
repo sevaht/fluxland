@@ -29,6 +29,7 @@
 #include "output.h"
 #include "placement.h"
 #include "rules.h"
+#include "pseudo_transparency.h"
 #include "server.h"
 #include "slit.h"
 #include "tabgroup.h"
@@ -274,6 +275,7 @@ wm_view_move(struct wm_view *view, int x, int y)
 	view->x = x;
 	view->y = y;
 	wlr_scene_node_set_position(&view->scene_tree->node, x, y);
+	wm_pseudo_update(view);
 	if (impl_of(view)->moved)
 		impl_of(view)->moved(view);
 	/* Its tabs share the frame */
@@ -493,6 +495,7 @@ wm_view_map_common(struct wm_view *view, bool want_maximized,
 	bool want_fullscreen)
 {
 	view->mapped = true;
+	wm_pseudo_update(view);
 	view->app_id_at_map = view->app_id && *view->app_id;
 	struct timespec now;
 	clock_gettime(CLOCK_MONOTONIC, &now);
@@ -789,6 +792,7 @@ wm_view_destroy_common(struct wm_view *view)
 	/* The frame tree (the client's surface tree goes with it) */
 	wlr_scene_node_destroy(&view->scene_tree->node);
 	view->scene_tree = NULL;
+	view->pseudo_tree = NULL;
 }
 
 static void

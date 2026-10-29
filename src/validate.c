@@ -304,6 +304,7 @@ static const struct init_key_spec init_keys[] = {
 	{"session.screen0.maxDisableMove", VT_BOOL, 0, 0, NULL},
 	{"session.screen0.maxDisableResize", VT_BOOL, 0, 0, NULL},
 	{"session.screen0.maxPullThreshold", VT_INT, 0, 2000, NULL},
+	{"session.screen0.pseudoTransparency", VT_BOOL, 0, 0, NULL},
 	{"session.screen0.snapLayoutPicker", VT_BOOL, 0, 0, NULL},
 	{"session.screen0.snapLayoutPickerSize", VT_INT, 60, 300, NULL},
 	{"session.screen0.snapLayouts", VT_STRING, 0, 0, NULL},

@@ -31,6 +31,7 @@
 #include "keyboard_actions.h"
 #include "dialog.h"
 #include "keyboard.h"
+#include "pseudo_transparency.h"
 #include "server.h"
 #include "config.h"
 #include "util.h"
@@ -341,6 +342,34 @@ handle_tile_to(struct wm_view *view, const char *argument)
 	int w = 1000 * (col - 1 + col_span) / cols - x;
 	int h = 1000 * (row - 1 + row_span) / rows - y;
 	wm_view_tile(view, x, y, w, h);
+	return true;
+}
+
+/*
+ * PseudoTransparent [on|off|toggle|default]: whether the window shows the
+ * desktop behind it where it is translucent; "default" goes back to the
+ * session.screen0.pseudoTransparency setting.  Toggles with no argument.
+ */
+static bool
+handle_pseudo_transparent(struct wm_view *view, const char *argument)
+{
+	if (!view)
+		return true;
+	const char *a = argument ? argument : "";
+	while (*a == ' ')
+		a++;
+	if (!*a || !strcasecmp(a, "toggle"))
+		view->pseudo_rule = wm_view_pseudo_transparent(view) ?
+			WM_PSEUDO_NO : WM_PSEUDO_YES;
+	else if (!strcasecmp(a, "on") || !strcasecmp(a, "yes"))
+		view->pseudo_rule = WM_PSEUDO_YES;
+	else if (!strcasecmp(a, "off") || !strcasecmp(a, "no"))
+		view->pseudo_rule = WM_PSEUDO_NO;
+	else if (!strcasecmp(a, "default") || !strcasecmp(a, "follow"))
+		view->pseudo_rule = WM_PSEUDO_FOLLOW;
+	else
+		return false;
+	wm_pseudo_update(view);
 	return true;
 }
 
@@ -1545,6 +1574,8 @@ wm_execute_action_on(struct wm_server *server, enum wm_action action,
 		return handle_tile_to(view, argument);
 	case WM_ACTION_SNAP_STEP:
 		return wm_view_snap_step(view, argument);
+	case WM_ACTION_PSEUDO_TRANSPARENT:
+		return handle_pseudo_transparent(view, argument);
 
 	/* Resize by delta */
 	case WM_ACTION_RESIZE_HORIZ:

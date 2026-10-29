@@ -29,6 +29,8 @@
 #   [FocusNewWindow] {yes|no}     - focus when opened
 #   [FocusProtection] {Gain|Refuse|Deny|Lock|None, ...}
 #   [Close]          {yes|no}     - save the window's state when it closes
+#   [PseudoTransparent] {yes|no}  - where translucent, show the wallpaper behind
+#                                   the window, not the windows below it
 #
 # Tab groups:
 #   [group] (workspace)   <- optional: join a window on this workspace

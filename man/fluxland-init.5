@@ -218,6 +218,16 @@ size it had before, under the pointer, and the drag goes on from there (0 =
 never; default: 40).  A drag more sideways than down, which carries it to
 another head, keeps it maximized.
 .TP
+.B session.screen0.pseudoTransparency
+A window that draws some transparency (a terminal with
+.B background_opacity
+below 1 in kitty, \fBalpha\fR in foot) shows the desktop behind it, the
+wallpaper, and not the windows below it, as with Fluxbox's root-pixmap
+pseudo-transparency (default: false).  Windows that are opaque are not
+affected.  A window's own say, the \fB[PseudoTransparent]\fR attribute or
+the \fBPseudoTransparent\fR action, wins.  The wallpaper can be fluxland's
+own or a layer-shell client's such as swaybg.
+.TP
 .B session.screen0.snapLayoutPicker
 With \fBenableWindowSnapping\fR, show thumbnails of layouts when a window is
 dragged to the top edge of a head, as Windows 11 does; dropping the window on

@@ -199,6 +199,14 @@ wm_decoration_set_shaded(struct wm_decoration *d, bool shaded,
 	d->shaded = shaded;
 }
 
+/* pseudo_transparency.c */
+
+void
+wm_pseudo_update(struct wm_view *view)
+{
+	(void)view;
+}
+
 /* workspace.c */
 
 struct wm_workspace *
@@ -615,6 +623,23 @@ TEST(test_states)
 	assert(late.maximized_horiz);
 }
 
+TEST(test_pseudo_transparent_attribute)
+{
+	load("[app] (a)\n  [PseudoTransparent] {yes}\n[end]\n"
+		"[app] (b)\n  [PseudoTransparent] {no}\n[end]\n"
+		"[app] (c)\n  [Workspace] {1}\n[end]\n");
+	struct wm_view a, b, c;
+	new_view(&a, "a", NULL, "");
+	new_view(&b, "b", NULL, "");
+	new_view(&c, "c", NULL, "");
+	map_view(&a);
+	map_view(&b);
+	map_view(&c);
+	assert(a.pseudo_rule == 1);	/* WM_PSEUDO_YES */
+	assert(b.pseudo_rule == 2);	/* WM_PSEUDO_NO */
+	assert(c.pseudo_rule == 0);	/* follows the global setting */
+}
+
 TEST(test_hidden_alpha_deco_protection)
 {
 	load("[app] (a)\n  [Hidden] {yes}\n  [Alpha] {300}\n"
@@ -884,6 +909,7 @@ main(void)
 	run_test_fluxland_1x_syntax();
 	run_test_group();
 	run_test_group_without_settings_and_startup();
+	run_test_pseudo_transparent_attribute();
 	run_test_remember_round_trip();
 	run_test_remember_replaces_fluxland_1x_entry();
 	run_test_close_saves_state();

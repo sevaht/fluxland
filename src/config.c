@@ -1278,6 +1278,8 @@ apply_menu_config(struct wm_config *config, struct rc_database *db)
 	 * built-in copy of Fluxbox's */
 	config->xwayland_keyboard_grab =
 		rc_get_bool(db, "session.xwayland.keyboardGrab", true);
+	config->pseudo_transparency =
+		rc_get_bool(db, "session.screen0.pseudoTransparency", false);
 	free(config->xwayland_resources);
 	config->xwayland_resources = NULL;
 	val = rc_get_string(db, "session.xwayland.resources");

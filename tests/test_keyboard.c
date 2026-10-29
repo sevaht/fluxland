@@ -716,6 +716,7 @@ enum wm_action {
 	WM_ACTION_RHALF,
 	WM_ACTION_TILE_TO,
 	WM_ACTION_SNAP_STEP,
+	WM_ACTION_PSEUDO_TRANSPARENT,
 	WM_ACTION_RESIZE_HORIZ,
 	WM_ACTION_RESIZE_VERT,
 	WM_ACTION_FOCUS_LEFT,
@@ -974,6 +975,8 @@ struct wm_view {
 	bool mapped, docked;
 	uint64_t focus_seq;
 	bool ignore_size_hints;
+	int pseudo_rule;
+	struct wlr_scene_tree *pseudo_tree;
 	void *foreign_toplevel_handle;
 	struct wm_decoration *decoration;
 	struct wl_listener request_maximize;
@@ -1237,6 +1240,10 @@ void wm_view_minimize(struct wm_view *v) { (void)v; stub_minimize_listener_count
 void wm_view_lhalf(struct wm_view *v) { (void)v; stub_lhalf_count++; }
 void wm_view_rhalf(struct wm_view *v) { (void)v; stub_rhalf_count++; }
 static int stub_tile_count, stub_tile_cell[4];
+static int stub_pseudo_update_count;
+void wm_pseudo_update(struct wm_view *v) { (void)v; stub_pseudo_update_count++; }
+bool wm_view_pseudo_transparent(const struct wm_view *v)
+{ return v->pseudo_rule == 1; }
 static int stub_snap_step_count;
 bool wm_view_snap_step(struct wm_view *v, const char *d)
 { (void)v; stub_snap_step_count++; return d != NULL; }
@@ -2277,6 +2284,37 @@ test_action_snap_step(void)
 	assert(stub_snap_step_count == before + 1);
 	assert(!wm_execute_action(&test_server, WM_ACTION_SNAP_STEP, NULL));
 	printf("  PASS: test_action_snap_step\n");
+}
+
+/* PseudoTransparent sets the window's own say, and updates its copy of the
+ * desktop */
+static void
+test_action_pseudo_transparent(void)
+{
+	setup_with_view();
+	struct wm_view *v = test_server.focused_view;
+	assert(v);
+	int before = stub_pseudo_update_count;
+
+	assert(wm_execute_action(&test_server, WM_ACTION_PSEUDO_TRANSPARENT,
+		"on"));
+	assert(v->pseudo_rule == 1);
+	assert(wm_execute_action(&test_server, WM_ACTION_PSEUDO_TRANSPARENT,
+		"off"));
+	assert(v->pseudo_rule == 2);
+	/* No argument toggles what it is now: off becomes on */
+	assert(wm_execute_action(&test_server, WM_ACTION_PSEUDO_TRANSPARENT,
+		NULL));
+	assert(v->pseudo_rule == 1);
+	assert(wm_execute_action(&test_server, WM_ACTION_PSEUDO_TRANSPARENT,
+		"default"));
+	assert(v->pseudo_rule == 0);
+	assert(stub_pseudo_update_count == before + 4);
+
+	assert(!wm_execute_action(&test_server, WM_ACTION_PSEUDO_TRANSPARENT,
+		"sideways"));
+	assert(stub_pseudo_update_count == before + 4);
+	printf("  PASS: test_action_pseudo_transparent\n");
 }
 
 /* Test LHalf / RHalf actions */
@@ -4706,6 +4744,7 @@ main(void)
 	test_action_lhalf_rhalf();
 	test_action_tile_to();
 	test_action_snap_step();
+	test_action_pseudo_transparent();
 	test_action_arrange_windows();
 	test_action_arrange_stack();
 	test_action_set_alpha_absolute();

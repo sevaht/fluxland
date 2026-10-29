@@ -1829,6 +1829,24 @@ test_slit_layer_fallback_to_int(void)
 	printf("  PASS: test_slit_layer_fallback_to_int\n");
 }
 
+/* Test: session.screen0.pseudoTransparency (default off) */
+static void
+test_pseudo_transparency(void)
+{
+	write_file(TEST_INIT, "\n");
+	struct wm_config *c = config_create();
+	config_load(c, TEST_INIT);
+	assert(c->pseudo_transparency == false);
+	config_destroy(c);
+
+	write_file(TEST_INIT, "session.screen0.pseudoTransparency: true\n");
+	c = config_create();
+	config_load(c, TEST_INIT);
+	assert(c->pseudo_transparency == true);
+	config_destroy(c);
+	printf("  PASS: test_pseudo_transparency\n");
+}
+
 /* Test: the snap layout picker's keys, layouts, and their defaults */
 static void
 test_snap_layouts(void)
@@ -1976,6 +1994,7 @@ main(void)
 	test_input_emulation();
 	test_xwayland_keyboard_grab();
 	test_snap_layouts();
+	test_pseudo_transparency();
 	test_dpi();
 	test_placement_policies();
 	test_workspace_names();

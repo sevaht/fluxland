@@ -40,6 +40,7 @@
 #include "config.h"
 #include "decoration.h"
 #include "icon.h"
+#include "pseudo_transparency.h"
 #include "server.h"
 #include "slit.h"
 #include "tabgroup.h"
@@ -490,8 +491,10 @@ handle_commit(struct wl_listener *listener, void *data)
 	if (view->decoration && view->server->style)
 		wm_decoration_refresh_geometry(view->decoration,
 			view->server->style);
-	if (view->mapped)
+	if (view->mapped) {
+		wm_pseudo_update(view);
 		wm_cursor_rebase(view->server);
+	}
 }
 
 /*

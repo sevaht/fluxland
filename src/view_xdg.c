@@ -24,6 +24,7 @@
 #include "decoration.h"
 #include "menu.h"
 #include "rules.h"
+#include "pseudo_transparency.h"
 #include "server.h"
 #include "slit.h"
 #include "view.h"
@@ -224,8 +225,10 @@ handle_xdg_toplevel_commit(struct wl_listener *listener, void *data)
 			view->server->style);
 	}
 	/* Its size may have changed under the pointer */
-	if (view->mapped)
+	if (view->mapped) {
+		wm_pseudo_update(view);
 		wm_cursor_rebase(view->server);
+	}
 }
 
 static void

@@ -243,6 +243,8 @@ struct wm_view {
 	struct wm_animation *animation;
 	int focus_protection;
 	bool ignore_size_hints;
+	int pseudo_rule;
+	struct wlr_scene_tree *pseudo_tree;
 	struct wlr_foreign_toplevel_handle_v1 *foreign_toplevel_handle;
 	struct wlr_ext_foreign_toplevel_handle_v1 *ext_toplevel_handle;
 	struct wlr_output *foreign_output;

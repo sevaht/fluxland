@@ -178,6 +178,10 @@ struct wm_view {
 
 	/* Ignore size hints from xdg_toplevel min/max constraints */
 	bool ignore_size_hints;
+	/* Pseudo-transparency (pseudo_transparency.c): the window's own say
+	 * (enum wm_pseudo_rule), and the copy of the desktop under it */
+	int pseudo_rule;
+	struct wlr_scene_tree *pseudo_tree;
 
 	/* True if this view is docked into the slit (skip normal WM handling) */
 	bool docked;

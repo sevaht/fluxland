@@ -247,6 +247,12 @@ exactly, with no gap.  The window follows its head (as with \fBLHalf\fP),
 a later maximize or resize ends it, and the same cell again puts the window
 back where it was.  Numbers outside the grid do nothing.
 .TP
+.BR PseudoTransparent " [on|off|toggle|default]"
+Whether the window shows the desktop behind it where it is translucent,
+instead of the windows below it (a fluxland extension).  Without an
+argument it toggles; \fBdefault\fR goes back to
+.BR session.screen0.pseudoTransparency .
+.TP
 .BI SnapStep " left" | right | up | down
 The window one step on its way in that direction, as the Windows key with an
 arrow does (a fluxland extension).

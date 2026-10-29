@@ -282,6 +282,7 @@ wm_sources = files(
   'src/cursor_actions.c',
   'src/cursor_snap.c',
   'src/snap_picker.c',
+  'src/pseudo_transparency.c',
   'src/view.c',
   'src/view_xdg.c',
   'src/view_focus.c',

@@ -310,6 +310,16 @@ test_snap_picker = executable(
 )
 test('snap_picker', test_snap_picker)
 
+# --- test_pseudo_transparency: what of the desktop is under a window ---
+test_pseudo_transparency = executable(
+  'test_pseudo_transparency',
+  files('test_pseudo_transparency.c', '../src/pseudo_transparency.c'),
+  include_directories: test_inc,
+  dependencies: [wayland_server, wlroots, server_protos, pangocairo, math],
+  install: false,
+)
+test('pseudo_transparency', test_pseudo_transparency)
+
 # --- test_cursor_snap: cursor snap zone detection and geometry tests ---
 # cursor.c is #included directly in the test to allow stubbing wlroots/cairo deps.
 test_cursor_snap = executable(

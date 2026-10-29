@@ -247,6 +247,7 @@ struct wm_config {
 	char *xwayland_resources; /* session.xwayland.resources: X resources
 				   * (an Xresources file) for XWayland */
 	bool xwayland_keyboard_grab; /* session.xwayland.keyboardGrab */
+	bool pseudo_transparency;	/* session.screen0.pseudoTransparency */
 	/* The layout picker of a window dragged to the top edge */
 	bool snap_layout_picker;	/* session.screen0.snapLayoutPicker */
 	int snap_layout_picker_size;	/* a layout's width, in pixels */

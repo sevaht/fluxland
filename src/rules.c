@@ -31,6 +31,7 @@
 #include "fbcompat.h"
 #include "output.h"
 #include "rules.h"
+#include "pseudo_transparency.h"
 #include "server.h"
 #include "util.h"
 #include "view.h"
@@ -198,6 +199,10 @@ wm_rules_apply(struct wm_rules *rules, struct wm_view *view)
 	}
 	if (app->has_ignore_size_hints)
 		view->ignore_size_hints = app->ignore_size_hints;
+	if (app->has_pseudo) {
+		view->pseudo_rule = app->pseudo ? WM_PSEUDO_YES : WM_PSEUDO_NO;
+		wm_pseudo_update(view);
+	}
 
 	if (app->has_workspace) {
 		struct wm_workspace *ws = wm_workspace_get(server,

@@ -556,6 +556,7 @@ static int g_event_count[8];
 static struct wm_view *g_event_view;
 static int g_rebase_count;
 static void wm_cursor_rebase(struct wm_server *s) { (void)s; g_rebase_count++; }
+static void wm_pseudo_update(struct wm_view *v) { (void)v; }
 
 static void
 wm_cursor_run_event(struct wm_server *s, uint32_t ctx, int event,
@@ -736,6 +737,8 @@ struct wm_view {
 	int64_t mapped_ms;
 	struct wm_view_prop *props;
 	bool ignore_size_hints;
+	int pseudo_rule;
+	struct wlr_scene_tree *pseudo_tree;
 	bool docked;
 	bool focus_hidden;
 	bool icon_hidden;
