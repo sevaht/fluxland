@@ -1127,6 +1127,24 @@ test_init_empty_value(void)
 	printf("  PASS: test_init_empty_value\n");
 }
 
+/* An empty text setting is a value (no buttons, no pins), not a mistake */
+static void
+test_init_empty_string_value(void)
+{
+	write_file(TEST_INIT,
+		"session.screen0.titlebar.left:\t\n"
+		"session.screen0.systray.pinLeft:\n"
+	);
+
+	struct config_result result;
+	config_result_init(&result);
+	validate_init_file(TEST_INIT, &result);
+	assert(result.count == 0);
+
+	config_result_destroy(&result);
+	printf("  PASS: test_init_empty_string_value\n");
+}
+
 /* ---- Init file: missing colon warning ---- */
 
 static void
@@ -1421,6 +1439,7 @@ main(void)
 	test_nonexistent_keys_file();
 	test_nonexistent_style_file();
 	test_init_empty_value();
+	test_init_empty_string_value();
 	test_init_missing_colon();
 	test_style_negative_integer();
 	test_keys_missing_colon();

@@ -758,7 +758,9 @@ validate_init_file(const char *path, struct config_result *result)
 			continue;
 		}
 
-		if (*value == '\0') {
+		/* Empty is a value for a text setting: Fluxbox writes
+		 * "titlebar.left:" for no buttons on the left */
+		if (*value == '\0' && spec->type != VT_STRING) {
 			config_result_add_warning(result, path, lineno,
 				"empty value for '%s'", key);
 			continue;
