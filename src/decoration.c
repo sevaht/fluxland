@@ -1682,6 +1682,67 @@ handle_new_xdg_decoration(struct wl_listener *listener, void *data)
 	xdg_decoration_send_mode(deco);
 }
 
+/* --- KDE server-decoration protocol (GTK3, older Qt) --- */
+
+struct wm_kde_decoration {
+	struct wm_server *server;
+	struct wlr_server_decoration *wlr_decoration;
+	struct wl_listener mode;
+	struct wl_listener destroy;
+};
+
+/* Whether the window is framed by us follows the mode it was given: only
+ * server-side is ours to draw (client-side, or none at all, is not) */
+static void
+kde_decoration_apply(struct wm_kde_decoration *kd)
+{
+	struct wm_view *view = wm_view_from_surface(kd->server,
+		kd->wlr_decoration->surface);
+	if (view)
+		wm_view_set_client_decorated(view, kd->wlr_decoration->mode !=
+			WLR_SERVER_DECORATION_MANAGER_MODE_SERVER);
+}
+
+static void
+handle_kde_decoration_mode(struct wl_listener *listener, void *data)
+{
+	struct wm_kde_decoration *kd = wl_container_of(listener, kd, mode);
+	kde_decoration_apply(kd);
+}
+
+static void
+handle_kde_decoration_destroy(struct wl_listener *listener, void *data)
+{
+	struct wm_kde_decoration *kd = wl_container_of(listener, kd, destroy);
+	wl_list_remove(&kd->mode.link);
+	wl_list_remove(&kd->destroy.link);
+	free(kd);
+}
+
+/* The listener for new ones, with the server it belongs to */
+struct wm_kde_listener {
+	struct wm_server *server;
+	struct wl_listener new_decoration;
+};
+static struct wm_kde_listener *kde_listener;
+
+static void
+handle_new_kde_decoration(struct wl_listener *listener, void *data)
+{
+	struct wm_kde_listener *kl =
+		wl_container_of(listener, kl, new_decoration);
+	struct wm_kde_decoration *kd = calloc(1, sizeof(*kd));
+	if (!kd)
+		return;
+	kd->server = kl->server;
+	kd->wlr_decoration = data;
+	kd->mode.notify = handle_kde_decoration_mode;
+	wl_signal_add(&kd->wlr_decoration->events.mode, &kd->mode);
+	kd->destroy.notify = handle_kde_decoration_destroy;
+	wl_signal_add(&kd->wlr_decoration->events.destroy, &kd->destroy);
+	kde_decoration_apply(kd);
+}
+
 void
 wm_xdg_decoration_init(struct wm_server *server)
 {
@@ -1703,10 +1764,21 @@ wm_xdg_decoration_init(struct wm_server *server)
 	 */
 	server->kde_decoration_mgr =
 		wlr_server_decoration_manager_create(server->wl_display);
-	if (server->kde_decoration_mgr)
+	if (server->kde_decoration_mgr) {
 		wlr_server_decoration_manager_set_default_mode(
 			server->kde_decoration_mgr,
 			WLR_SERVER_DECORATION_MANAGER_MODE_SERVER);
+		/* A window that asks for it this way (GTK3 does) is framed by
+		 * us, as one that asks through xdg-decoration is */
+		kde_listener = calloc(1, sizeof(*kde_listener));
+		if (kde_listener) {
+			kde_listener->server = server;
+			kde_listener->new_decoration.notify =
+				handle_new_kde_decoration;
+			wl_signal_add(&server->kde_decoration_mgr->events
+				.new_decoration, &kde_listener->new_decoration);
+		}
+	}
 }
 
 void
@@ -1714,4 +1786,9 @@ wm_xdg_decoration_finish(struct wm_server *server)
 {
 	if (server->xdg_decoration_mgr)
 		wl_list_remove(&server->new_xdg_decoration.link);
+	if (kde_listener) {
+		wl_list_remove(&kde_listener->new_decoration.link);
+		free(kde_listener);
+		kde_listener = NULL;
+	}
 }
