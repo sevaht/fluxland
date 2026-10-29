@@ -536,7 +536,7 @@ wm_server_init(struct wm_server *server)
 	wlr_cursor_attach_output_layout(server->cursor,
 		server->output_layout);
 	server->cursor_mgr = wlr_xcursor_manager_create(
-		WM_XCURSOR_DEFAULT, WM_XCURSOR_SIZE);
+		NULL, WM_XCURSOR_SIZE);
 
 	/* Init lists */
 	wl_list_init(&server->views);

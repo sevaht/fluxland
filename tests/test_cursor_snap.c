@@ -913,7 +913,6 @@ enum wm_cursor_mode {
 	WM_CURSOR_TABBING,
 };
 
-#define WM_XCURSOR_DEFAULT "left_ptr"
 #define WM_XCURSOR_SIZE 24
 
 struct wm_workspace { int index; };

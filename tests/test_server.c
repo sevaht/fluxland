@@ -410,7 +410,6 @@ struct wm_wallpaper { int dummy; };
 struct wm_ws_transition { int dummy; };
 struct wm_atspi_bridge { int dummy; };
 
-#define WM_XCURSOR_DEFAULT "left_ptr"
 #define WM_XCURSOR_SIZE 24
 #define WM_WLR_COMPOSITOR_VERSION 6
 

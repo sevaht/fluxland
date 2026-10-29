@@ -104,7 +104,6 @@ struct wlr_drm_lease_v1_manager;
 struct wlr_transient_seat_manager_v1;
 struct wlr_linux_drm_syncobj_manager_v1;
 
-#define WM_XCURSOR_DEFAULT "left_ptr"
 #define WM_XCURSOR_SIZE 24
 
 enum wm_cursor_mode {
