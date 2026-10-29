@@ -1249,6 +1249,40 @@ wm_systray_call_item_method(struct wm_systray *systray, const char *bus_name,
 	wlr_log(WLR_DEBUG, "systray: %s on %s", method, bus_name);
 }
 
+/* The left button on an item that has a menu and may have no Activate */
+struct activate_query {
+	struct item_query q;	/* first: query_take_item() frees it all */
+	int x, y;
+};
+
+static int
+handle_activate_reply(sd_bus_message *reply, void *userdata,
+	sd_bus_error *ret_error)
+{
+	struct activate_query *aq = userdata;
+	struct wm_systray *systray = aq->q.systray;
+	int x = aq->x, y = aq->y;
+	struct wm_systray_item *item = query_take_item(&aq->q);
+	if (!item || !item->menu_path)
+		return 0;
+
+	/*
+	 * It has no Activate: libappindicator's items have only a menu (and a
+	 * secondary action), and it is for the tray to show it
+	 */
+	if (sd_bus_message_is_method_error(reply,
+		    "org.freedesktop.DBus.Error.UnknownMethod") ||
+	    sd_bus_message_is_method_error(reply,
+		    "org.freedesktop.DBus.Error.UnknownInterface") ||
+	    sd_bus_message_is_method_error(reply,
+		    "org.freedesktop.DBus.Error.UnknownObject"))
+		wm_systray_menu_open(systray, item->bus_name,
+			item->object_path, item->menu_path,
+			item->title && *item->title ? item->title : item->id,
+			x, y);
+	return 0;
+}
+
 bool
 wm_systray_handle_click(struct wm_systray *systray,
 	double local_x, double local_y, uint32_t button)
@@ -1278,6 +1312,27 @@ wm_systray_handle_click(struct wm_systray *systray,
 			item->title && *item->title ? item->title : item->id,
 			x, y);
 		return true;
+	}
+
+	/*
+	 * An icon with a menu that is not only a menu: Activate it, and if the
+	 * application has no such method the menu is what the click is for
+	 */
+	if (button == 0x110 /* BTN_LEFT */ && item->menu_path) {
+		struct activate_query *aq = malloc(sizeof(*aq));
+		if (aq) {
+			aq->q.systray = systray;
+			aq->q.item = item;
+			aq->x = x;
+			aq->y = y;
+			if (sd_bus_call_method_async(systray->bus, NULL,
+				    item->bus_name, item->object_path,
+				    "org.kde.StatusNotifierItem", "Activate",
+				    handle_activate_reply, aq, "ii",
+				    (int32_t)x, (int32_t)y) >= 0)
+				return true;
+			free(aq);
+		}
 	}
 
 	const char *method = NULL;

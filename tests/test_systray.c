@@ -485,6 +485,10 @@ int sd_bus_process(sd_bus *bus, sd_bus_message **ret)
 	return g_sdbus_process_ret;
 }
 
+static sd_bus_message_handler_t g_last_async_callback;
+static void *g_last_async_userdata;
+static char g_last_async_member[32];
+
 int sd_bus_call_method_async(sd_bus *bus, sd_bus_slot **slot,
 	const char *destination, const char *path,
 	const char *interface, const char *member,
@@ -492,9 +496,12 @@ int sd_bus_call_method_async(sd_bus *bus, sd_bus_slot **slot,
 	const char *types, ...)
 {
 	(void)bus; (void)slot; (void)destination; (void)path;
-	(void)interface; (void)member; (void)callback; (void)userdata;
-	(void)types;
+	(void)interface; (void)types;
 	g_sdbus_call_method_async_count++;
+	g_last_async_callback = callback;
+	g_last_async_userdata = userdata;
+	snprintf(g_last_async_member, sizeof(g_last_async_member), "%s",
+		member);
 	return 0;
 }
 
@@ -1112,6 +1119,60 @@ test_handle_click_buttons(void)
 
 	destroy_test_systray(systray);
 	printf("  PASS: test_handle_click_buttons\n");
+}
+
+/*
+ * A left click on an icon that has a menu: Activate is tried, and the menu
+ * opens only if the application says it has no such method (Steam's
+ * libappindicator item has none, and its icon did nothing).
+ */
+static void
+test_left_click_menu_when_there_is_no_activate(void)
+{
+	struct wm_systray *systray = make_test_systray();
+	reset_globals();
+
+	struct wm_systray_item *item = add_test_item(systray, ":1.60", true);
+	item->menu_path = strdup("/org/ayatana/NotificationItem/steam/Menu");
+	item->is_menu = false;
+	wm_systray_layout(systray, 0, 0, 200, 24);
+
+	g_menu_open_count = 0;
+	g_last_async_callback = NULL;
+	assert(wm_systray_handle_click(systray, 10.0, 10.0, 0x110));
+	/* Activate was called, with a callback, and no menu yet */
+	assert(strcmp(g_last_async_member, "Activate") == 0);
+	assert(g_last_async_callback != NULL);
+	assert(g_menu_open_count == 0);
+
+	/* It had the method: nothing more */
+	g_sdbus_is_method_error_ret = 0;
+	g_last_async_callback(NULL, g_last_async_userdata, NULL);
+	assert(g_menu_open_count == 0);
+
+	/* It had none: the menu, where the click was */
+	assert(wm_systray_handle_click(systray, 10.0, 10.0, 0x110));
+	g_sdbus_is_method_error_ret = 1;
+	g_last_async_callback(NULL, g_last_async_userdata, NULL);
+	assert(g_menu_open_count == 1);
+	assert(strcmp(g_menu_open_bus, ":1.60") == 0);
+	assert(strcmp(g_menu_open_path,
+		"/org/ayatana/NotificationItem/steam/Menu") == 0);
+	g_sdbus_is_method_error_ret = 0;
+
+	/* The item went before the answer: nothing is done with it */
+	assert(wm_systray_handle_click(systray, 10.0, 10.0, 0x110));
+	void *stale = g_last_async_userdata;
+	sd_bus_message_handler_t cb = g_last_async_callback;
+	int opened = g_menu_open_count;
+	systray_item_destroy(item);
+	g_sdbus_is_method_error_ret = 1;
+	cb(NULL, stale, NULL);
+	assert(g_menu_open_count == opened);
+	g_sdbus_is_method_error_ret = 0;
+
+	destroy_test_systray(systray);
+	printf("  PASS: test_left_click_menu_when_there_is_no_activate\n");
 }
 
 /*
@@ -2444,6 +2505,7 @@ main(void)
 	test_handle_click_hit();
 	test_handle_click_empty();
 	test_handle_click_buttons();
+	test_left_click_menu_when_there_is_no_activate();
 	test_find_item_by_bus_name();
 	test_item_destroy();
 	test_layout_small_height();
