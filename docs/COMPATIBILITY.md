@@ -194,8 +194,8 @@ Fluxbox's own styles. See [STYLES.md](STYLES.md).
 | `session.screen0.iconbar.iconWidth` | yes |
 | `session.screen0.iconbar.mode` | yes |
 | `session.screen0.iconbar.usePixmap` | yes |
-| `session.screen0.maxDisableMove` | yes |
-| `session.screen0.maxDisableResize` | yes |
+| `session.screen0.maxDisableMove` | yes (pointer and keyboard) |
+| `session.screen0.maxDisableResize` | yes (pointer and keyboard) |
 | `session.screen0.maxIgnoreIncrement` | yes |
 | `session.screen0.menu.alpha` | yes |
 | `session.screen0.menuDelay` | yes |
@@ -324,3 +324,18 @@ Fluxbox's own styles. See [STYLES.md](STYLES.md).
 | `wallpapermenu` | yes |
 | `wallpapers` | yes |
 | `workspaces` | yes |
+
+## Differences from Fluxbox
+
+- **Moving a maximized window.** Fluxbox leaves a window that was moved by hand
+  flagged as maximized wherever it is dropped (so restoring jumps back to where it
+  was before it was maximized).  fluxland keeps it maximized on the head it is
+  dropped on: dropped on its own head it goes back, on another head it is
+  maximized there.  The same for windows maximized vertically or horizontally, or
+  tiled to a half.  Resizing is as in Fluxbox: it makes the window no longer
+  maximized, keeping the size it has.
+- **Grid tiling (extension).** `TileTo cols rows col row [colspan rowspan]`
+  places a window in a cell of a grid on its head (thirds, a top row, ...), and
+  `session.screen0.snapLayoutPicker` adds a Windows 11 style picker of layouts
+  (`session.screen0.snapLayouts`) to the top snap zone for doing the same with
+  the mouse.  Fluxbox has neither; with both unused nothing differs.

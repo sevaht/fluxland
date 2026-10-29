@@ -59,6 +59,7 @@
 
 /* fluxland */
 #define WM_ANIMATION_H
+#define WM_SNAP_PICKER_H
 #define WM_CONFIG_H
 #define WM_CURSOR_H
 #define WM_DECORATION_H
@@ -567,12 +568,13 @@ enum wm_snap_zone {
 	WM_SNAP_ZONE_NONE = 0,
 	WM_SNAP_ZONE_LEFT_HALF,
 	WM_SNAP_ZONE_RIGHT_HALF,
-	WM_SNAP_ZONE_TOP_HALF,
+	WM_SNAP_ZONE_MAXIMIZE,
 	WM_SNAP_ZONE_BOTTOM_HALF,
 	WM_SNAP_ZONE_TOPLEFT,
 	WM_SNAP_ZONE_TOPRIGHT,
 	WM_SNAP_ZONE_BOTTOMLEFT,
 	WM_SNAP_ZONE_BOTTOMRIGHT,
+	WM_SNAP_ZONE_TILE,
 };
 
 struct wm_config {
@@ -586,7 +588,9 @@ struct wm_config {
 	bool opaque_resize;
 	int edge_snap_threshold;
 	bool enable_window_snapping;
+	bool snap_layout_picker;
 	int snap_zone_threshold;
+	int max_pull_threshold;
 	bool workspace_warping;
 	bool workspace_warping_horizontal;
 	bool workspace_warping_vertical;
@@ -773,6 +777,7 @@ struct wm_view {
 	bool maximized_horiz;
 	bool lhalf;
 	bool rhalf;
+	struct wm_tile { bool active; int x, y, w, h; } tile;
 	bool show_decoration;
 	char *title;
 	char *app_id;
@@ -914,6 +919,9 @@ enum wm_cursor_mode {
 struct wm_workspace { int index; };
 
 struct wm_server {
+	int grab_head_x, grab_head_y;
+	double grab_pointer_x, grab_pointer_y;
+	bool grab_pulled;
 	struct wl_display *wl_display;
 	struct wl_event_loop *wl_event_loop;
 
@@ -993,6 +1001,11 @@ struct wm_server {
 	int snap_zone;
 	struct wlr_box snap_preview_box;
 	struct wlr_scene_buffer *snap_preview;
+	struct wlr_scene_buffer *snap_picker;
+	bool snap_picker_shown;
+	int snap_picker_layout, snap_picker_cell;
+	struct wlr_box snap_picker_usable;
+	int snap_tile[4];
 
 	struct wlr_scene_rect *wireframe_rects[4];
 	bool wireframe_active;
@@ -1324,6 +1337,30 @@ wlr_seat_pointer_notify_enter(struct wlr_seat *seat,
 	(void)seat; (void)surf; (void)sx; (void)sy;
 }
 
+static void wm_view_clear_maximized(struct wm_view *v) { (void)v; }
+static bool
+wm_view_pull_restore(struct wm_view *v, double px, double py, double *gx,
+	double *gy)
+{
+	(void)v; (void)px; (void)py; (void)gx; (void)gy;
+	return false;
+}
+static void
+wm_view_snap_maximize(struct wm_view *v, const struct wlr_box *area,
+	const struct wlr_box *prev, int x, int y)
+{
+	(void)v; (void)area; (void)prev; (void)x; (void)y;
+}
+static void
+wm_view_snap_tile(struct wm_view *v, const struct wlr_box *area,
+	const int cell[4], const struct wlr_box *prev, int x, int y)
+{
+	(void)v; (void)area; (void)cell; (void)prev; (void)x; (void)y;
+}
+static void
+wm_view_settle_on_head(struct wm_view *v, int x, int y)
+{ (void)v; (void)x; (void)y; }
+
 static void
 wlr_seat_pointer_notify_motion(struct wlr_seat *seat, uint32_t time,
 	double sx, double sy)
@@ -1643,6 +1680,24 @@ static void closefrom(int fd) { (void)fd; }
 #define VIEW_STUB_SET_FRAME_BOX
 #include "view_backend_stubs.c"
 
+/* The layout picker has its own tests (test_snap_picker.c) */
+struct wm_snap_picker_geom { struct wlr_box panel; int count; };
+static bool wm_snap_picker_geometry(const struct wm_config *c,
+	const struct wlr_box *u, struct wm_snap_picker_geom *g)
+{ (void)c; (void)u; (void)g; return false; }
+static bool wm_snap_picker_hit(const struct wm_snap_picker_geom *g,
+	const struct wm_config *c, double x, double y, int *l, int *k)
+{ (void)g; (void)c; (void)x; (void)y; (void)l; (void)k; return false; }
+static bool wm_snap_picker_contains(const struct wm_snap_picker_geom *g,
+	const struct wlr_box *u, double x, double y)
+{ (void)g; (void)u; (void)x; (void)y; return false; }
+static void wm_snap_picker_target(const struct wm_config *c,
+	const struct wlr_box *u, int l, int k, int out[4], struct wlr_box *b)
+{ (void)c; (void)u; (void)l; (void)k; (void)out; (void)b; }
+static void snap_picker_show(struct wm_server *s, const struct wlr_box *u,
+	int l, int c) { (void)s; (void)u; (void)l; (void)c; }
+static void snap_picker_destroy(struct wm_server *s) { (void)s; }
+
 #include "pixel_buffer.c"
 #include "cursor_snap.c"
 /* --- command.c / keyboard_actions.c: record what mouse bindings run --- */
@@ -1857,7 +1912,7 @@ test_snap_zone_detect_edges(void)
 	test_cursor.x = 960;
 	test_cursor.y = 3;
 	assert(snap_zone_detect(&test_server, &usable) ==
-		WM_SNAP_ZONE_TOP_HALF);
+		WM_SNAP_ZONE_MAXIMIZE);
 
 	/* Bottom edge */
 	test_cursor.x = 960;
@@ -2142,14 +2197,10 @@ test_snap_zone_geometry_odd_dimensions(void)
 	assert(right.width == 961);
 	assert(left.width + right.width == usable.width);
 
-	struct wlr_box top = snap_zone_geometry(WM_SNAP_ZONE_TOP_HALF,
-		&usable);
 	struct wlr_box bottom = snap_zone_geometry(WM_SNAP_ZONE_BOTTOM_HALF,
 		&usable);
 
-	assert(top.height == 540);
 	assert(bottom.height == 541);
-	assert(top.height + bottom.height == usable.height);
 
 	printf("  PASS: snap_zone_geometry_odd_dimensions\n");
 }
@@ -2178,10 +2229,11 @@ test_snap_zone_geometry_top_bottom(void)
 	struct wlr_box usable = { .x = 0, .y = 0,
 		.width = 1920, .height = 1080 };
 
-	struct wlr_box top = snap_zone_geometry(WM_SNAP_ZONE_TOP_HALF,
+	/* The top edge maximizes: the whole usable area */
+	struct wlr_box top = snap_zone_geometry(WM_SNAP_ZONE_MAXIMIZE,
 		&usable);
 	assert(top.x == 0 && top.y == 0);
-	assert(top.width == 1920 && top.height == 540);
+	assert(top.width == 1920 && top.height == 1080);
 
 	struct wlr_box bottom = snap_zone_geometry(WM_SNAP_ZONE_BOTTOM_HALF,
 		&usable);

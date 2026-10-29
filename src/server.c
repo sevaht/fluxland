@@ -28,6 +28,7 @@
 #include "keyboard.h"
 #include "foreign_toplevel.h"
 #include "eis.h"
+#include "xwayland_grab.h"
 #include "ipc.h"
 #include "keybind.h"
 #include "layer_shell.h"
@@ -475,6 +476,8 @@ wm_server_init(struct wm_server *server)
 	server->xdg_popup_tree = wlr_scene_tree_create(&server->scene->tree);
 	server->layer_top = wlr_scene_tree_create(&server->scene->tree);
 	server->layer_overlay = wlr_scene_tree_create(&server->scene->tree);
+	server->xwayland_override_tree =
+		wlr_scene_tree_create(&server->scene->tree);
 
 	/* Output layout and scene integration */
 	wm_output_init(server);
@@ -683,6 +686,7 @@ wm_server_init(struct wm_server *server)
 
 	/* XWayland: X11 application support (compile-time optional) */
 	wm_xwayland_init(server);
+	wm_xwayland_grab_init(server);
 
 	return true;
 }

@@ -747,6 +747,7 @@ struct wm_server {
 	struct wl_listener xwayland_new_surface;
 	struct wl_listener xwayland_ready;
 	struct wlr_scene_tree *xdg_popup_tree;
+	struct wlr_scene_tree *xwayland_override_tree;
 	struct wm_slit *slit;
 	struct wm_toolbar *toolbar;
 	struct wm_style *style;
@@ -765,6 +766,7 @@ void wm_xwayland_sync_positions(struct wm_server *server);
 static struct wm_server server;
 static struct wlr_seat seat;
 static struct wlr_scene_tree popup_tree;
+static struct wlr_scene_tree override_tree;
 static struct wm_slit slit;
 
 static int g_map_common_count, g_unmap_common_count;
@@ -1007,8 +1009,11 @@ reset(void)
 	memset(&seat, 0, sizeof(seat));
 	memset(&popup_tree, 0, sizeof(popup_tree));
 	popup_tree.node.enabled = true;
+	memset(&override_tree, 0, sizeof(override_tree));
+	override_tree.node.enabled = true;
 	server.seat = &seat;
 	server.xdg_popup_tree = &popup_tree;
+	server.xwayland_override_tree = &override_tree;
 	server.slit = &slit;
 	wl_list_init(&server.views);
 	wl_list_init(&server.xwayland_unmanaged);
@@ -1866,7 +1871,8 @@ test_unmanaged(void)
 
 	fake_map(&menu);
 	assert(u->scene_tree);
-	assert(u->scene_tree->node.parent == &popup_tree);
+	/* Not with the xdg popups, which the toolbar covers */
+	assert(u->scene_tree->node.parent == &override_tree);
 	assert(u->scene_tree->node.x == 120 && u->scene_tree->node.y == 80);
 	assert(g_kb_enter_surface == &menu.surface);
 	assert(g_map_common_count == 0);

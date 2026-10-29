@@ -238,6 +238,15 @@ negative number counts from the end.
 .TP
 .BR Minimize " (" Iconify ", " MinimizeWindow "), " Maximize " (" MaximizeWindow "), " MaximizeHorizontal ", " MaximizeVertical ", " Fullscreen
 .TP
+.BI TileTo " cols rows col row " "[\fIcolspan rowspan\fP]"
+Put the window in a cell of a grid of its head's usable area (a fluxland
+extension): all numbers from 1, the spans default to 1.
+.B TileTo 3 1 2 1
+is the middle third, \fBTileTo 2 2 1 1 2 1\fP the top half.  Cells meet
+exactly, with no gap.  The window follows its head (as with \fBLHalf\fP),
+a later maximize or resize ends it, and the same cell again puts the window
+back where it was.  Numbers outside the grid do nothing.
+.TP
 .BR Shade " (" ShadeWindow "), " ShadeOn ", " ShadeOff ", " Stick " (" StickWindow )
 .TP
 .BR Raise ", " Lower ", " RaiseLayer " [\fIn\fP], " LowerLayer " [\fIn\fP]"

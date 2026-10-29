@@ -102,6 +102,12 @@ struct wm_view {
 	bool maximized_horiz;
 	bool lhalf;
 	bool rhalf;
+	/* Tiled to a cell of its head (TileTo, the layout picker): where, in
+	 * permille of the head's usable area */
+	struct wm_tile {
+		bool active;
+		int x, y, w, h;
+	} tile;
 
 	/* Decoration visibility toggle */
 	bool show_decoration; /* default true */

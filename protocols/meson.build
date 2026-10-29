@@ -16,6 +16,7 @@ wayland_scanner_server = generator(
 server_protocols = [
   wl_protocol_dir / 'stable/xdg-shell/xdg-shell.xml',
   wl_protocol_dir / 'unstable/xdg-decoration/xdg-decoration-unstable-v1.xml',
+  wl_protocol_dir / 'unstable/xwayland-keyboard-grab/xwayland-keyboard-grab-unstable-v1.xml',
   wl_protocol_dir / 'staging/cursor-shape/cursor-shape-v1.xml',
   wl_protocol_dir / 'staging/content-type/content-type-v1.xml',
   wl_protocol_dir / 'staging/ext-foreign-toplevel-list/ext-foreign-toplevel-list-v1.xml',

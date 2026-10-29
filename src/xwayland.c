@@ -1093,9 +1093,13 @@ handle_unmanaged_map(struct wl_listener *listener, void *data)
 	struct wm_server *server = u->server;
 	struct wlr_xwayland_surface *xs = u->xsurface;
 
-	/* Above all windows, like xdg popups */
+	/*
+	 * Above everything but the session lock, as on X (where nothing
+	 * stacks over an override-redirect window): so a screen locker's
+	 * window covers the toolbar too, and a menu is not cut by it
+	 */
 	u->scene_tree = wlr_scene_subsurface_tree_create(
-		server->xdg_popup_tree, xs->surface);
+		server->xwayland_override_tree, xs->surface);
 	if (!u->scene_tree)
 		return;
 	unmanaged_set_position(u);

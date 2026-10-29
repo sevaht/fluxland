@@ -55,6 +55,16 @@ settings (X11 programs from
 in the X resources, see
 .BR session.xwayland.resources ).
 .TP
+.B session.xwayland.keyboardGrab
+Whether X11 programs may grab the keyboard (default: true).  On X a program
+that calls \fBXGrabKeyboard\fR (xlock, a VNC viewer, a virtual machine) gets
+every key, whatever has the focus.  XWayland asks for the same through the
+xwayland\-keyboard\-grab protocol, which only it can use: the grabbing window
+gets the focus and every key, fluxland's key bindings do not run, and it ends
+when the program lets go.  The VT switch (Ctrl+Alt+F\fIn\fR) and the emergency exit
+(Mod4+Shift+E) still work.  A screen locker run this way is no session lock
+(see \fBext\-session\-lock\fR: swaylock, gtklock, ...).
+.TP
 .B session.xwayland.resources
 An X resources file (an \fI~/.Xresources\fR) to give XWayland: the
 \fBXft.dpi\fR, \fBXft.hintstyle\fR and \fBXft.rgba\fR that plain Xft
@@ -189,6 +199,42 @@ Resizing with the mouse always keeps to them.
 .B session.screen0.fullMaximization
 Maximize windows over the toolbar and slit (default: false).
 .TP
+.BR session.screen0.maxDisableMove ", " session.screen0.maxDisableResize
+A maximized or fullscreen window can not be moved (resized) by hand, with the
+pointer or the keyboard (default: false).
+.PP
+Without them, resizing a maximized window by hand makes it no longer maximized
+and keeps the size it has, so that maximizing it again and restoring returns to
+what was made, not to what it was before.  Moving it keeps it maximized, on the
+head it is dropped on (the one holding its centre): dropped on its own, it goes
+back; on another, it is maximized there, and restoring returns it to that head.
+The same goes for a window maximized vertically or horizontally, or tiled to a
+half.  (Fluxbox leaves a moved window flagged as maximized where it was dropped.)
+.TP
+.B session.screen0.maxPullThreshold
+How far (in pixels) a maximized window being dragged has to be pulled down,
+and more down than sideways, to come off its maximize: it goes back to the
+size it had before, under the pointer, and the drag goes on from there (0 =
+never; default: 40).  A drag more sideways than down, which carries it to
+another head, keeps it maximized.
+.TP
+.B session.screen0.snapLayoutPicker
+With \fBenableWindowSnapping\fR, show thumbnails of layouts when a window is
+dragged to the top edge of a head, as Windows 11 does; dropping the window on
+a cell of one tiles it there, dropping it on the edge itself still maximizes
+(default: false).
+.TP
+.B session.screen0.snapLayoutPickerSize
+The width in pixels of each layout's thumbnail, 60 to 300 (default: 120).
+.TP
+.B session.screen0.snapLayouts
+The layouts of the picker: layouts separated by \fB;\fR, each a list of cells
+\fIx,y,width,height\fR in percent of the head's usable area (decimals
+allowed), up to 12 layouts of 8 cells.  Cells that do not fit in the head are
+skipped.  Unset, there are seven: two columns, 2/3 and 1/3, 1/3 and 2/3,
+three columns, 25/50/25, a big cell with two beside it, and four quarters.
+Example: \fB0,0,50,100 50,0,50,100; 0,0,100,50 0,50,100,50\fR.
+.TP
 .B session.screen0.showWindowPosition
 Show window position overlay during move/resize (default: false).
 .TP
@@ -231,7 +277,12 @@ Animation duration in milliseconds (0\-5000, default: 300).
 .SH WINDOW SNAP ZONES
 .TP
 .B session.screen0.enableWindowSnapping
-Enable edge/corner snap zones for tiling (default: false).
+Enable edge/corner snap zones for tiling (default: false).  A window dragged
+until the pointer is in a zone, with a preview of where it will go, is put
+there when it is let go: the left and right edges are the halves of the head,
+the corners its quarters, the bottom edge its bottom half and the top edge
+maximizes it there (on the head the pointer is on, as on Windows and KDE).  A
+window that was maximized keeps the size restoring goes back to.
 .TP
 .B session.screen0.snapZoneThreshold
 Pixel distance from screen edge to trigger snap zones (1\-100, default: 10).

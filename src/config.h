@@ -69,13 +69,35 @@ enum wm_snap_zone {
 	WM_SNAP_ZONE_NONE = 0,
 	WM_SNAP_ZONE_LEFT_HALF,
 	WM_SNAP_ZONE_RIGHT_HALF,
-	WM_SNAP_ZONE_TOP_HALF,
+	WM_SNAP_ZONE_MAXIMIZE,	/* the top edge */
 	WM_SNAP_ZONE_BOTTOM_HALF,
 	WM_SNAP_ZONE_TOPLEFT,
 	WM_SNAP_ZONE_TOPRIGHT,
 	WM_SNAP_ZONE_BOTTOMLEFT,
 	WM_SNAP_ZONE_BOTTOMRIGHT,
+	WM_SNAP_ZONE_TILE,	/* a cell of the layout picker */
 };
+
+/* A layout of the snap layout picker: cells of a head, in permille of its
+ * usable area (x, y, width, height) */
+#define WM_SNAP_LAYOUTS_MAX 12
+#define WM_SNAP_CELLS_MAX 8
+struct wm_snap_cell {
+	int x, y, w, h;
+};
+struct wm_snap_layout {
+	int cell_count;
+	struct wm_snap_cell cells[WM_SNAP_CELLS_MAX];
+};
+
+/*
+ * Layouts from text: layouts separated by ';', each a list of cells
+ * "x,y,w,h" in percent of the head ("0,0,50,100 50,0,50,100" is two equal
+ * columns).  What is not a cell (or not inside the head) is skipped, and a
+ * layout with no cell; returns how many layouts, at most max.
+ */
+int wm_snap_layouts_parse(const char *text, struct wm_snap_layout *out,
+	int max);
 
 /* Workspace transition type */
 enum wm_workspace_transition {
@@ -224,6 +246,12 @@ struct wm_config {
 	int dpi;		/* session.dpi; 0 = the style's, else 96 */
 	char *xwayland_resources; /* session.xwayland.resources: X resources
 				   * (an Xresources file) for XWayland */
+	bool xwayland_keyboard_grab; /* session.xwayland.keyboardGrab */
+	/* The layout picker of a window dragged to the top edge */
+	bool snap_layout_picker;	/* session.screen0.snapLayoutPicker */
+	int snap_layout_picker_size;	/* a layout's width, in pixels */
+	int snap_layout_count;
+	struct wm_snap_layout snap_layouts[WM_SNAP_LAYOUTS_MAX];
 	int toolbar_layer;
 	int toolbar_alpha;
 	int toolbar_on_head;
@@ -283,6 +311,8 @@ struct wm_config {
 	bool full_maximization;
 	bool max_disable_move;     /* maximized windows can't be moved */
 	bool max_disable_resize;   /* ...or resized */
+	int max_pull_threshold;    /* pull a maximized window down this far to
+				    * restore it (0: never) */
 
 	/* Window opacity (0-255) */
 	int window_focus_alpha;

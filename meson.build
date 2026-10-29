@@ -281,6 +281,7 @@ wm_sources = files(
   'src/cursor.c',
   'src/cursor_actions.c',
   'src/cursor_snap.c',
+  'src/snap_picker.c',
   'src/view.c',
   'src/view_xdg.c',
   'src/view_focus.c',
@@ -329,6 +330,7 @@ wm_sources = files(
   'src/validate.c',
   'src/wallpaper.c',
   'src/xwayland.c',
+  'src/xwayland_grab.c',
   'src/eis.c',
 )
 

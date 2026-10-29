@@ -557,6 +557,179 @@ move_view_to_output(struct wm_view *view, struct wm_output *out)
 }
 
 void
+wm_view_clear_maximized(struct wm_view *view)
+{
+	bool was_maximized = view->maximized;
+	view->maximized = false;
+	view->maximized_vert = false;
+	view->maximized_horiz = false;
+	view->lhalf = false;
+	view->rhalf = false;
+	view->tile.active = false;
+	/* Only a full maximize is a state the client knows of; the size it
+	 * has stays the one it was given */
+	if (was_maximized) {
+		wm_view_set_maximized_state(view, false);
+		wm_foreign_toplevel_set_maximized(view, false);
+	}
+}
+
+void
+wm_view_settle_on_head(struct wm_view *view, int old_head_x, int old_head_y)
+{
+	if (!view || !(view->maximized || view->maximized_vert ||
+	    view->maximized_horiz || view->lhalf || view->rhalf ||
+	    view->tile.active || view->fullscreen))
+		return;
+	struct wm_output *output = wm_output_for_view(view);
+	if (output) {
+		struct wlr_box head;
+		wm_output_layout_box(output, &head);
+		view->saved_geometry.x += head.x - old_head_x;
+		view->saved_geometry.y += head.y - old_head_y;
+	}
+	wm_view_refit(view);
+}
+
+/* A cell's frame: its edges are where the permille boundaries fall, the same
+ * pixel for the two cells either side of one */
+static void
+tile_frame(const struct wm_tile *tile, const struct wlr_box *area,
+	struct wlr_box *frame)
+{
+	int x0 = area->x + (int)((long)area->width * tile->x / 1000);
+	int x1 = area->x + (int)((long)area->width * (tile->x + tile->w) /
+		1000);
+	int y0 = area->y + (int)((long)area->height * tile->y / 1000);
+	int y1 = area->y + (int)((long)area->height * (tile->y + tile->h) /
+		1000);
+	frame->x = x0;
+	frame->y = y0;
+	frame->width = x1 - x0;
+	frame->height = y1 - y0;
+}
+
+void
+wm_view_tile(struct wm_view *view, int x, int y, int w, int h)
+{
+	if (!view || w < 1 || h < 1 || x < 0 || y < 0 || x + w > 1000 ||
+	    y + h > 1000)
+		return;
+	if (!wm_view_surface(view) || !view->scene_tree->node.enabled ||
+	    view->fullscreen)
+		return;
+
+	if (view->tile.active && view->tile.x == x && view->tile.y == y &&
+	    view->tile.w == w && view->tile.h == h) {
+		/* The same cell again: back to what it was */
+		view->tile.active = false;
+		view->x = view->saved_geometry.x;
+		view->y = view->saved_geometry.y;
+		wm_view_set_size(view, view->saved_geometry.width,
+			view->saved_geometry.height);
+		wlr_scene_node_set_position(&view->scene_tree->node,
+			view->x, view->y);
+		return;
+	}
+
+	struct wlr_box area, frame;
+	if (!wm_view_maximize_area(view, &area))
+		return;
+
+	bool in_state = view->maximized || view->maximized_vert ||
+		view->maximized_horiz || view->lhalf || view->rhalf ||
+		view->tile.active;
+	if (!in_state)
+		wm_view_get_geometry(view, &view->saved_geometry);
+	wm_view_clear_maximized(view);
+
+	view->tile = (struct wm_tile){ true, x, y, w, h };
+	tile_frame(&view->tile, &area, &frame);
+	wm_view_set_frame_box(view, &frame);
+}
+
+bool
+wm_view_pull_restore(struct wm_view *view, double px, double py,
+	double *grab_x, double *grab_y)
+{
+	if (!view || !view->maximized || view->saved_geometry.width <= 0 ||
+	    view->saved_geometry.height <= 0)
+		return false;
+
+	struct wlr_box frame;
+	wm_view_frame_box(view, &frame);
+	double across = frame.width > 0 ? (px - frame.x) / frame.width : 0.5;
+	double down = py - frame.y;
+
+	struct wlr_box saved = view->saved_geometry;
+	wm_view_clear_maximized(view);
+	wm_view_set_size(view, saved.width, saved.height);
+
+	int top, bottom, left, right;
+	wm_view_frame_extents(view, &top, &bottom, &left, &right);
+	int new_w = saved.width + left + right;
+	int new_h = saved.height + top + bottom;
+	if (down > new_h - 1)
+		down = new_h - 1;
+	wm_view_move(view, (int)(px - across * new_w), (int)(py - down));
+	*grab_x = px - view->x;
+	*grab_y = py - view->y;
+	return true;
+}
+
+void
+wm_view_snap_maximize(struct wm_view *view, const struct wlr_box *area,
+	const struct wlr_box *prev_saved, int old_head_x, int old_head_y)
+{
+	/* On the head first, where it can be maximized from */
+	struct wlr_box frame;
+	wm_view_frame_box(view, &frame);
+	int x = view->x;
+	if (x + frame.width > area->x + area->width)
+		x = area->x + area->width - frame.width;
+	if (x < area->x)
+		x = area->x;
+	wm_view_move(view, x, area->y);
+	wm_view_toggle_maximize(view);
+
+	if (prev_saved && view->maximized) {
+		struct wm_output *output = wm_output_for_view(view);
+		struct wlr_box head = { 0 };
+		if (output)
+			wm_output_layout_box(output, &head);
+		view->saved_geometry = *prev_saved;
+		view->saved_geometry.x += head.x - old_head_x;
+		view->saved_geometry.y += head.y - old_head_y;
+	}
+}
+
+void
+wm_view_snap_tile(struct wm_view *view, const struct wlr_box *area,
+	const int cell[4], const struct wlr_box *prev_saved, int old_head_x,
+	int old_head_y)
+{
+	struct wlr_box frame;
+	wm_view_frame_box(view, &frame);
+	int x = view->x;
+	if (x + frame.width > area->x + area->width)
+		x = area->x + area->width - frame.width;
+	if (x < area->x)
+		x = area->x;
+	wm_view_move(view, x, area->y);
+	wm_view_tile(view, cell[0], cell[1], cell[2], cell[3]);
+
+	if (prev_saved && view->tile.active) {
+		struct wm_output *output = wm_output_for_view(view);
+		struct wlr_box head = { 0 };
+		if (output)
+			wm_output_layout_box(output, &head);
+		view->saved_geometry = *prev_saved;
+		view->saved_geometry.x += head.x - old_head_x;
+		view->saved_geometry.y += head.y - old_head_y;
+	}
+}
+
+void
 wm_view_refit(struct wm_view *view)
 {
 	struct wm_output *output = wm_output_for_view(view);
@@ -592,8 +765,10 @@ wm_view_refit(struct wm_view *view)
 		if (view->rhalf)
 			frame.x += half_w;
 	}
+	if (view->tile.active)
+		tile_frame(&view->tile, &box, &frame);
 	if (view->maximized_vert || view->maximized_horiz ||
-	    view->lhalf || view->rhalf)
+	    view->lhalf || view->rhalf || view->tile.active)
 		wm_view_set_frame_box(view, &frame);
 }
 

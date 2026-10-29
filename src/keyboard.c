@@ -33,6 +33,7 @@
 #include "keybind.h"
 #include "menu.h"
 #include "protocols.h"
+#include "xwayland_grab.h"
 #include "session_lock.h"
 #include "view.h"
 
@@ -336,7 +337,12 @@ handle_key(struct wl_listener *listener, void *data)
 	 * desktop), forward all keys to the client except emergency
 	 * combos: VT switch (Ctrl+Alt+Fn) and exit (Mod4+Shift+E).
 	 */
-	if (wm_protocols_kb_shortcuts_inhibited(server)) {
+	/* An X11 program has the keyboard grabbed (xlock, a VNC viewer): the
+	 * same, whatever has the focus */
+	bool x_grab = wm_xwayland_grab_surface(server) != NULL;
+	if (x_grab || wm_protocols_kb_shortcuts_inhibited(server)) {
+		if (x_grab)
+			wm_xwayland_grab_focus(server);
 		if (event->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
 			for (int i = 0; i < nsyms; i++) {
 				/* VT switch: always allow */

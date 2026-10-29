@@ -325,10 +325,32 @@ wm_view_begin_interactive(struct wm_view *view,
 		return;
 	}
 
+	/* maxDisableMove, maxDisableResize: as Fluxbox, a maximized or
+	 * fullscreen window then can't be moved or resized by hand */
+	if ((view->maximized || view->fullscreen) && server->config &&
+	    ((mode == WM_CURSOR_MOVE && server->config->max_disable_move) ||
+	     (mode == WM_CURSOR_RESIZE &&
+	      server->config->max_disable_resize)))
+		return;
+
 	server->grabbed_view = view;
 	server->cursor_mode = mode;
 
+	/* A hand-made size is not maximized: kept as it is, from here
+	 * (Fluxbox's startResizing disables maximization) */
+	if (mode == WM_CURSOR_RESIZE)
+		wm_view_clear_maximized(view);
+
 	if (mode == WM_CURSOR_MOVE) {
+		struct wm_output *head = wm_output_for_view(view);
+		struct wlr_box head_box = { 0 };
+		if (head)
+			wm_output_layout_box(head, &head_box);
+		server->grab_head_x = head_box.x;
+		server->grab_head_y = head_box.y;
+		server->grab_pointer_x = server->cursor->x;
+		server->grab_pointer_y = server->cursor->y;
+		server->grab_pulled = false;
 		server->grab_x = server->cursor->x - view->x;
 		server->grab_y = server->cursor->y - view->y;
 		/* Reset grab_geobox so stale resize values don't affect move */

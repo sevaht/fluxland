@@ -303,6 +303,10 @@ static const struct init_key_spec init_keys[] = {
 	{"session.screen0.fullMaximization", VT_BOOL, 0, 0, NULL},
 	{"session.screen0.maxDisableMove", VT_BOOL, 0, 0, NULL},
 	{"session.screen0.maxDisableResize", VT_BOOL, 0, 0, NULL},
+	{"session.screen0.maxPullThreshold", VT_INT, 0, 2000, NULL},
+	{"session.screen0.snapLayoutPicker", VT_BOOL, 0, 0, NULL},
+	{"session.screen0.snapLayoutPickerSize", VT_INT, 60, 300, NULL},
+	{"session.screen0.snapLayouts", VT_STRING, 0, 0, NULL},
 	{"session.screen0.showWindowPosition", VT_BOOL, 0, 0, NULL},
 
 	/* Placement */
@@ -320,6 +324,7 @@ static const struct init_key_spec init_keys[] = {
 	{"session.screen0.toolbar.height", VT_INT, 0, 200, NULL},
 	{"session.dpi", VT_INT, 0, 960, NULL},
 	{"session.xwayland.resources", VT_STRING, 0, 0, NULL},
+	{"session.xwayland.keyboardGrab", VT_BOOL, 0, 0, NULL},
 	{"session.screen0.toolbar.layer", VT_LAYER, 0, 0, NULL},
 	{"session.screen0.toolbar.alpha", VT_INT, 0, 255, NULL},
 	{"session.screen0.toolbar.onhead", VT_INT, 0, 32, NULL},

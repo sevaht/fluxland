@@ -468,6 +468,8 @@ struct wm_view;
 
 /* Config */
 struct wm_config {
+	bool max_disable_move;
+	bool max_disable_resize;
 	int workspace_count;
 	char **workspace_names;
 	int workspace_name_count;
@@ -696,6 +698,7 @@ struct wm_view {
 	bool maximized_horiz;
 	bool lhalf;
 	bool rhalf;
+	struct wm_tile { bool active; int x, y, w, h; } tile;
 	bool show_decoration;
 	char *title;
 	bool title_override;
@@ -764,6 +767,9 @@ struct wm_view {
 
 /* Server struct */
 struct wm_server {
+	int grab_head_x, grab_head_y;
+	double grab_pointer_x, grab_pointer_y;
+	bool grab_pulled;
 	struct wl_display *wl_display;
 	struct wl_event_loop *wl_event_loop;
 	struct wlr_backend *backend;
@@ -1158,12 +1164,15 @@ wlr_output_layout_output_at(struct wlr_output_layout *layout,
 	return g_output_at_return;
 }
 
+/* Where the head is in the layout: a test of a second head sets it */
+static int g_layout_origin_x;
+
 static void
 wlr_output_layout_get_box(struct wlr_output_layout *layout,
 	struct wlr_output *output, struct wlr_box *box)
 {
 	(void)layout; (void)output;
-	box->x = 0; box->y = 0;
+	box->x = g_layout_origin_x; box->y = 0;
 	box->width = 1920; box->height = 1080;
 }
 
@@ -4613,6 +4622,262 @@ test_maximize_enter_full_max(void)
 	printf("  PASS: maximize_enter_full_max\n");
 }
 
+/* A window the user resizes by hand is not maximized any more, but stays
+ * where it is, as big as it is; fullscreen is not its business */
+static void
+test_clear_maximized_keeps_geometry(void)
+{
+	init_test_server();
+	setup_mock_view(0, &test_workspace);
+	setup_mock_output(0, 0, 0, 1920, 1080);
+	g_output_at_return = &test_wlr_outputs[0];
+
+	wm_view_toggle_maximize(&test_views[0]);
+	assert(test_views[0].maximized);
+	test_views[0].maximized_vert = true;
+	test_views[0].maximized_horiz = true;
+	test_views[0].lhalf = true;
+	test_views[0].rhalf = true;
+	test_views[0].fullscreen = true;
+	int x = test_views[0].x, y = test_views[0].y;
+	struct wlr_box saved = test_views[0].saved_geometry;
+
+	wm_view_clear_maximized(&test_views[0]);
+	assert(!test_views[0].maximized && !test_views[0].maximized_vert &&
+		!test_views[0].maximized_horiz && !test_views[0].lhalf &&
+		!test_views[0].rhalf);
+	assert(test_views[0].fullscreen);
+	assert(test_views[0].x == x && test_views[0].y == y);
+	assert(memcmp(&saved, &test_views[0].saved_geometry,
+		sizeof(saved)) == 0);
+
+	wl_list_remove(&test_views[0].link);
+	wl_list_remove(&test_outputs[0].link);
+	g_output_at_return = NULL;
+	printf("  PASS: clear_maximized_keeps_geometry\n");
+}
+
+/* A maximized window moved by hand and dropped on its own head goes back */
+static void
+test_settle_on_same_head(void)
+{
+	init_test_server();
+	setup_mock_view(0, &test_workspace);
+	setup_mock_output(0, 0, 0, 1920, 1080);
+	g_output_at_return = &test_wlr_outputs[0];
+	g_layout_origin_x = 0;
+
+	wm_view_toggle_maximize(&test_views[0]);
+	int max_x = test_views[0].x, max_y = test_views[0].y;
+	test_views[0].x += 40;
+	test_views[0].y += 25;
+	struct wlr_box saved = test_views[0].saved_geometry;
+
+	wm_view_settle_on_head(&test_views[0], 0, 0);
+	assert(test_views[0].maximized);
+	assert(test_views[0].x == max_x && test_views[0].y == max_y);
+	assert(memcmp(&saved, &test_views[0].saved_geometry,
+		sizeof(saved)) == 0);
+
+	wl_list_remove(&test_views[0].link);
+	wl_list_remove(&test_outputs[0].link);
+	g_output_at_return = NULL;
+	printf("  PASS: settle_on_same_head\n");
+}
+
+/* Dropped on another head it is maximized there, and what undoing that
+ * returns it to is on that head too */
+static void
+test_settle_on_other_head(void)
+{
+	init_test_server();
+	setup_mock_view(0, &test_workspace);
+	setup_mock_output(0, 0, 0, 1920, 1080);
+	setup_mock_output(1, 1920, 0, 1920, 1080);
+	g_output_at_return = &test_wlr_outputs[0];
+	g_layout_origin_x = 0;
+
+	wm_view_toggle_maximize(&test_views[0]);
+	test_views[0].saved_geometry = (struct wlr_box){ 100, 150, 800, 600 };
+
+	/* Dragged across: it is on head 2 now */
+	test_views[0].x = 1920 + 300;
+	g_output_at_return = &test_wlr_outputs[1];
+	g_layout_origin_x = 1920;
+	wm_view_settle_on_head(&test_views[0], 0, 0);
+
+	assert(test_views[0].maximized);
+	assert(test_views[0].x == 1920);
+	assert(test_views[0].saved_geometry.x == 100 + 1920);
+	assert(test_views[0].saved_geometry.y == 150);
+	assert(test_views[0].saved_geometry.width == 800);
+
+	g_layout_origin_x = 0;
+	wl_list_remove(&test_views[0].link);
+	wl_list_remove(&test_outputs[1].link);
+	wl_list_remove(&test_outputs[0].link);
+	g_output_at_return = NULL;
+	printf("  PASS: settle_on_other_head\n");
+}
+
+/* A plain window has nothing to settle */
+static void
+test_settle_plain_window_untouched(void)
+{
+	init_test_server();
+	setup_mock_view(0, &test_workspace);
+	setup_mock_output(0, 0, 0, 1920, 1080);
+	g_output_at_return = &test_wlr_outputs[0];
+	test_views[0].x = 321;
+	test_views[0].y = 123;
+	test_views[0].saved_geometry = (struct wlr_box){ 1, 2, 3, 4 };
+
+	wm_view_settle_on_head(&test_views[0], 0, 0);
+	assert(test_views[0].x == 321 && test_views[0].y == 123);
+	assert(test_views[0].saved_geometry.x == 1);
+	assert(!test_views[0].maximized);
+
+	wl_list_remove(&test_views[0].link);
+	wl_list_remove(&test_outputs[0].link);
+	g_output_at_return = NULL;
+	printf("  PASS: settle_plain_window_untouched\n");
+}
+
+/* A maximized window pulled down comes off its maximize: back to the size it
+ * had, the pointer in the same place across it and as far down */
+static void
+test_pull_restore(void)
+{
+	init_test_server();
+	setup_mock_view(0, &test_workspace);
+	setup_mock_output(0, 0, 0, 1920, 1080);
+	g_output_at_return = &test_wlr_outputs[0];
+	g_layout_origin_x = 0;
+	double gx = -1, gy = -1;
+
+	/* Not maximized: nothing to pull from */
+	assert(!wm_view_pull_restore(&test_views[0], 960, 30, &gx, &gy));
+
+	wm_view_toggle_maximize(&test_views[0]);
+	assert(test_views[0].maximized);
+	test_views[0].saved_geometry = (struct wlr_box){ 100, 150, 800, 600 };
+	/* The client has committed the maximized size */
+	test_xdg_surfaces[0].geometry = (struct wlr_box){ 0, 0, 1920, 1080 };
+
+	assert(wm_view_pull_restore(&test_views[0], 960, 30, &gx, &gy));
+	assert(!test_views[0].maximized);
+	/* Half way across 1920, so half way across 800: x = 960 - 400 */
+	assert(test_views[0].x == 560);
+	assert(test_views[0].y == 0);
+	assert(gx == 400 && gy == 30);
+
+	/* No size to go back to (it began maximized): left as it is */
+	wm_view_toggle_maximize(&test_views[0]);
+	test_views[0].saved_geometry = (struct wlr_box){ 0, 0, 0, 0 };
+	assert(!wm_view_pull_restore(&test_views[0], 960, 30, &gx, &gy));
+	assert(test_views[0].maximized);
+
+	wl_list_remove(&test_views[0].link);
+	wl_list_remove(&test_outputs[0].link);
+	g_output_at_return = NULL;
+	printf("  PASS: pull_restore\n");
+}
+
+/* Dropped in the maximize zone of the second head: maximized there, and a
+ * window that was maximized keeps what it is restored to, on that head */
+static void
+test_snap_maximize_on_another_head(void)
+{
+	init_test_server();
+	setup_mock_view(0, &test_workspace);
+	setup_mock_output(0, 0, 0, 1920, 1080);
+	setup_mock_output(1, 1920, 0, 1920, 1080);
+	g_output_at_return = &test_wlr_outputs[1];
+	g_layout_origin_x = 1920;
+	struct wlr_box area = { 1920, 0, 1920, 1080 };
+
+	/* A plain window, dropped at x = 1000 (half off the head) */
+	test_views[0].x = 1000;
+	wm_view_snap_maximize(&test_views[0], &area, NULL, 0, 0);
+	assert(test_views[0].maximized);
+	assert(test_views[0].x == 1920 && test_views[0].y == 0);
+
+	/* One that was maximized on head 1, restore to (100, 150, 800x600) */
+	wm_view_clear_maximized(&test_views[0]);
+	struct wlr_box prev = { 100, 150, 800, 600 };
+	wm_view_snap_maximize(&test_views[0], &area, &prev, 0, 0);
+	assert(test_views[0].maximized);
+	assert(test_views[0].saved_geometry.x == 100 + 1920);
+	assert(test_views[0].saved_geometry.y == 150);
+	assert(test_views[0].saved_geometry.width == 800);
+
+	g_layout_origin_x = 0;
+	wl_list_remove(&test_views[0].link);
+	wl_list_remove(&test_outputs[1].link);
+	wl_list_remove(&test_outputs[0].link);
+	g_output_at_return = NULL;
+	printf("  PASS: snap_maximize_on_another_head\n");
+}
+
+/* A tile is a cell of the head's usable area, in permille: neighbours meet at
+ * the same pixel even for thirds of an odd width; the same cell again puts the
+ * window back; a maximize or a hand resize clears it; it follows the window
+ * to another head */
+static void
+test_tile_cells(void)
+{
+	init_test_server();
+	setup_mock_view(0, &test_workspace);
+	setup_mock_output(0, 0, 0, 1000, 700);
+	setup_mock_output(1, 1000, 0, 1001, 700);
+	g_output_at_return = &test_wlr_outputs[0];
+	g_layout_origin_x = 0;
+	test_views[0].x = 123;
+	test_views[0].y = 45;
+
+	/* The middle third of 1000: 333..666 */
+	wm_view_tile(&test_views[0], 333, 0, 333, 1000);
+	assert(test_views[0].tile.active);
+	assert(test_views[0].x == 333 && test_views[0].y == 0);
+	assert(test_views[0].saved_geometry.x == 123);
+
+	/* Not a cell: nothing changes */
+	wm_view_tile(&test_views[0], 900, 0, 200, 1000);
+	wm_view_tile(&test_views[0], 0, 0, 0, 1000);
+	assert(test_views[0].x == 333);
+
+	/* Another cell: no new save (it would be the tile), the cell moves */
+	wm_view_tile(&test_views[0], 666, 0, 334, 1000);
+	assert(test_views[0].x == 666);
+	assert(test_views[0].saved_geometry.x == 123);
+
+	/* The same cell again: back where it was */
+	wm_view_tile(&test_views[0], 666, 0, 334, 1000);
+	assert(!test_views[0].tile.active);
+	assert(test_views[0].x == 123 && test_views[0].y == 45);
+
+	/* A maximize, or a hand resize, is not a tile */
+	wm_view_tile(&test_views[0], 0, 0, 500, 500);
+	assert(test_views[0].tile.active);
+	wm_view_clear_maximized(&test_views[0]);
+	assert(!test_views[0].tile.active);
+
+	/* It goes to the head the window is on (999 wide: 1001 for head 2) */
+	wm_view_tile(&test_views[0], 500, 0, 500, 1000);
+	test_views[0].x = 1000 + 300;
+	g_output_at_return = &test_wlr_outputs[1];
+	g_layout_origin_x = 1000;
+	wm_view_refit(&test_views[0]);
+	assert(test_views[0].x == 1000 + 1001 * 500 / 1000);
+
+	g_layout_origin_x = 0;
+	wl_list_remove(&test_views[0].link);
+	wl_list_remove(&test_outputs[1].link);
+	wl_list_remove(&test_outputs[0].link);
+	g_output_at_return = NULL;
+	printf("  PASS: tile_cells\n");
+}
+
 static void
 test_maximize_already_lhalf(void)
 {
@@ -5703,6 +5968,13 @@ main(void)
 
 	/* maximize edge cases */
 	test_maximize_enter_full_max();
+	test_clear_maximized_keeps_geometry();
+	test_settle_on_same_head();
+	test_settle_on_other_head();
+	test_settle_plain_window_untouched();
+	test_pull_restore();
+	test_tile_cells();
+	test_snap_maximize_on_another_head();
 	test_maximize_already_lhalf();
 	test_maximize_already_rhalf();
 	test_maximize_vert_with_output();

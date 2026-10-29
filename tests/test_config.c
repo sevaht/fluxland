@@ -215,6 +215,26 @@ test_dpi(void)
 	printf("  PASS: test_dpi\n");
 }
 
+/* Test: session.xwayland.keyboardGrab (default on) */
+static void
+test_xwayland_keyboard_grab(void)
+{
+	write_file(TEST_INIT, "session.screen0.workspaces: 4\n");
+	struct wm_config *c = config_create();
+	config_load(c, TEST_INIT);
+	assert(c->xwayland_keyboard_grab == true);
+
+	write_file(TEST_INIT, "session.xwayland.keyboardGrab: false\n");
+	config_load(c, TEST_INIT);
+	assert(c->xwayland_keyboard_grab == false);
+
+	write_file(TEST_INIT, "session.xwayland.keyboardGrab: true\n");
+	config_load(c, TEST_INIT);
+	assert(c->xwayland_keyboard_grab == true);
+	config_destroy(c);
+	printf("  PASS: test_xwayland_keyboard_grab\n");
+}
+
 /* Test: xwayland.inputEmulation, who may inject input through XTest */
 static void
 test_input_emulation(void)
@@ -1809,6 +1829,54 @@ test_slit_layer_fallback_to_int(void)
 	printf("  PASS: test_slit_layer_fallback_to_int\n");
 }
 
+/* Test: the snap layout picker's keys, layouts, and their defaults */
+static void
+test_snap_layouts(void)
+{
+	write_file(TEST_INIT, "\n");
+	struct wm_config *c = config_create();
+	config_load(c, TEST_INIT);
+	assert(c->snap_layout_picker == false);
+	assert(c->snap_layout_picker_size == 120);
+	assert(c->snap_layout_count == 7);
+	assert(c->snap_layouts[0].cell_count == 2);
+	assert(c->snap_layouts[0].cells[1].x == 500);
+	assert(c->snap_layouts[3].cell_count == 3);
+	assert(c->snap_layouts[6].cell_count == 4);
+	/* thirds meet with no gap and no overlap */
+	assert(c->snap_layouts[3].cells[0].x + c->snap_layouts[3].cells[0].w ==
+		c->snap_layouts[3].cells[1].x);
+	assert(c->snap_layouts[3].cells[2].x + c->snap_layouts[3].cells[2].w ==
+		1000);
+	config_destroy(c);
+
+	write_file(TEST_INIT,
+		"session.screen0.snapLayoutPicker: true\n"
+		"session.screen0.snapLayoutPickerSize: 1000\n"
+		"session.screen0.snapLayouts: 0,0,50,100 50,0,50,100;"
+		" 0,0,33.5,100 bogus 10,10,0,5 90,0,20,100 33.5,0,66.5,100;"
+		" nonsense\n");
+	c = config_create();
+	config_load(c, TEST_INIT);
+	assert(c->snap_layout_picker == true);
+	assert(c->snap_layout_picker_size == 300); /* clamped */
+	assert(c->snap_layout_count == 2);	/* "nonsense" has no cell */
+	assert(c->snap_layouts[0].cell_count == 2);
+	assert(c->snap_layouts[1].cell_count == 2); /* bad cells skipped */
+	assert(c->snap_layouts[1].cells[0].w == 335);
+	assert(c->snap_layouts[1].cells[1].x == 335);
+	config_destroy(c);
+
+	/* nothing usable: the defaults */
+	write_file(TEST_INIT, "session.screen0.snapLayouts: junk\n");
+	c = config_create();
+	config_load(c, TEST_INIT);
+	assert(c->snap_layout_count == 7);
+	config_destroy(c);
+
+	printf("  PASS: test_snap_layouts\n");
+}
+
 /* Test: a new user gets the default files; nothing is overwritten, and a
  * ~/.fluxbox or FLUXLAND_CONFIG_DIR is left alone */
 static void
@@ -1906,6 +1974,8 @@ main(void)
 	test_load_basic();
 	test_focus_models();
 	test_input_emulation();
+	test_xwayland_keyboard_grab();
+	test_snap_layouts();
 	test_dpi();
 	test_placement_policies();
 	test_workspace_names();

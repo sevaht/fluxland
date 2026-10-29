@@ -47,6 +47,7 @@
 /* Forward declarations for types defined by other modules */
 struct wm_view;
 struct wm_eis;
+struct wm_xwayland_grab;
 struct wm_workspace;
 struct wm_config;
 struct wm_style;
@@ -138,6 +139,9 @@ struct wm_server {
 	struct wlr_scene_tree *xdg_popup_tree;
 	struct wlr_scene_tree *layer_top;
 	struct wlr_scene_tree *layer_overlay;
+	/* X11 override-redirect windows (xlock's, menus, tooltips): above
+	 * everything but the session lock, as on X, so also the toolbar */
+	struct wlr_scene_tree *xwayland_override_tree;
 
 	struct wlr_xdg_shell *xdg_shell;
 	struct wl_listener new_xdg_toplevel;
@@ -198,6 +202,13 @@ struct wm_server {
 	double grab_x, grab_y;
 	struct wlr_box grab_geobox;
 	uint32_t resize_edges;
+	/* The head a move began on (its place in the layout): a maximized
+	 * window goes with it to another (wm_view_settle_on_head) */
+	int grab_head_x, grab_head_y;
+	/* Where the pointer was when a move began, and whether a maximized
+	 * window has since been pulled off its maximize (wm_view_pull_restore) */
+	double grab_pointer_x, grab_pointer_y;
+	bool grab_pulled;
 
 	/* Show window position/size overlay during move/resize */
 	bool show_position;
@@ -207,6 +218,12 @@ struct wm_server {
 	int snap_zone; /* enum wm_snap_zone from config.h */
 	struct wlr_box snap_preview_box;
 	struct wlr_scene_buffer *snap_preview;
+	/* The layout picker (snap_picker.c), and what a drop on it tiles */
+	struct wlr_scene_buffer *snap_picker;
+	bool snap_picker_shown;
+	int snap_picker_layout, snap_picker_cell; /* hovered, -1 for none */
+	struct wlr_box snap_picker_usable; /* the head it is on */
+	int snap_tile[4]; /* WM_SNAP_ZONE_TILE: the cell, x y w h in permille */
 
 	/* Wireframe move/resize (opaqueMove: false / opaqueResize: false) */
 	struct wlr_scene_rect *wireframe_rects[4]; /* top, right, bottom, left */
@@ -463,6 +480,7 @@ struct wm_server {
 	struct wm_tooltip *tooltip;	/* tooltipDelay's window */
 
 	struct wm_eis *eis;	/* XTest input of X11 programs */
+	struct wm_xwayland_grab *xwayland_grab;	/* XGrabKeyboard of X11 programs */
 
 #ifdef WM_HAS_XWAYLAND
 	/* XWayland bridge */

@@ -300,6 +300,16 @@ test_xwayland_logic = executable(
 )
 test('xwayland_logic', test_xwayland_logic)
 
+# --- test_snap_picker: layout picker geometry and hit-testing ---
+test_snap_picker = executable(
+  'test_snap_picker',
+  files('test_snap_picker.c', '../src/snap_picker.c'),
+  include_directories: test_inc,
+  dependencies: [wayland_server, wlroots, server_protos, pangocairo, math],
+  install: false,
+)
+test('snap_picker', test_snap_picker)
+
 # --- test_cursor_snap: cursor snap zone detection and geometry tests ---
 # cursor.c is #included directly in the test to allow stubbing wlroots/cairo deps.
 test_cursor_snap = executable(

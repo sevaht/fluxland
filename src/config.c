@@ -563,6 +563,65 @@ wm_config_setup_files(const char *datadir)
 	return copied;
 }
 
+/* Two equal columns, 2/3 and 1/3, 1/3 and 2/3, three columns, a wide middle,
+ * a big cell with two beside it, four quarters */
+#define WM_SNAP_LAYOUTS_DEFAULT \
+	"0,0,50,100 50,0,50,100;" \
+	"0,0,66.7,100 66.7,0,33.3,100;" \
+	"0,0,33.3,100 33.3,0,66.7,100;" \
+	"0,0,33.3,100 33.3,0,33.4,100 66.7,0,33.3,100;" \
+	"0,0,25,100 25,0,50,100 75,0,25,100;" \
+	"0,0,50,100 50,0,50,50 50,50,50,50;" \
+	"0,0,50,50 50,0,50,50 0,50,50,50 50,50,50,50"
+
+int
+wm_snap_layouts_parse(const char *text, struct wm_snap_layout *out, int max)
+{
+	int count = 0;
+	if (!text || !out)
+		return 0;
+	char *copy = strdup(text);
+	if (!copy)
+		return 0;
+
+	char *layout_save = NULL;
+	for (char *layout = strtok_r(copy, ";", &layout_save);
+	     layout && count < max;
+	     layout = strtok_r(NULL, ";", &layout_save)) {
+		struct wm_snap_layout *l = &out[count];
+		l->cell_count = 0;
+		char *cell_save = NULL;
+		for (char *cell = strtok_r(layout, " \t\n", &cell_save);
+		     cell && l->cell_count < WM_SNAP_CELLS_MAX;
+		     cell = strtok_r(NULL, " \t\n", &cell_save)) {
+			double v[4];
+			int n = 0;
+			char *end = cell;
+			while (n < 4) {
+				v[n] = strtod(end, &end);
+				n++;
+				if (n < 4 && *end++ != ',')
+					break;
+			}
+			/* Percent to permille, inside the head, not empty */
+			int x = (int)(v[0] * 10 + 0.5), y = (int)(v[1] * 10 + 0.5);
+			int w = (int)(v[2] * 10 + 0.5), h = (int)(v[3] * 10 + 0.5);
+			if (n != 4 || *end || x < 0 || y < 0 || w < 1 || h < 1 ||
+			    x + w > 1000 || y + h > 1000) {
+				fprintf(stderr, "fluxland: snapLayouts: not a cell: %s\n",
+					cell);
+				continue;
+			}
+			l->cells[l->cell_count++] =
+				(struct wm_snap_cell){ x, y, w, h };
+		}
+		if (l->cell_count > 0)
+			count++;
+	}
+	free(copy);
+	return count;
+}
+
 static char *
 resolve_path(const char *config_dir, const char *value,
 	     const char *default_name)
@@ -830,6 +889,10 @@ apply_window_config(struct wm_config *config, struct rc_database *db)
 		rc_get_bool(db, "session.screen0.maxDisableMove", false);
 	config->max_disable_resize =
 		rc_get_bool(db, "session.screen0.maxDisableResize", false);
+	config->max_pull_threshold =
+		rc_get_int(db, "session.screen0.maxPullThreshold", 40);
+	if (config->max_pull_threshold < 0 || config->max_pull_threshold > 2000)
+		config->max_pull_threshold = 40;
 
 	/* Opacity */
 	config->window_focus_alpha =
@@ -864,6 +927,25 @@ apply_window_config(struct wm_config *config, struct rc_database *db)
 		config->snap_zone_threshold = 1;
 	if (config->snap_zone_threshold > 100)
 		config->snap_zone_threshold = 100;
+
+	/* The layout picker, and its layouts: the init's, else the usual ones */
+	config->snap_layout_picker =
+		rc_get_bool(db, "session.screen0.snapLayoutPicker", false);
+	config->snap_layout_picker_size =
+		rc_get_int(db, "session.screen0.snapLayoutPickerSize", 120);
+	if (config->snap_layout_picker_size < 60)
+		config->snap_layout_picker_size = 60;
+	if (config->snap_layout_picker_size > 300)
+		config->snap_layout_picker_size = 300;
+	config->snap_layout_count = 0;
+	const char *layouts = rc_get_string(db, "session.screen0.snapLayouts");
+	if (layouts)
+		config->snap_layout_count = wm_snap_layouts_parse(layouts,
+			config->snap_layouts, WM_SNAP_LAYOUTS_MAX);
+	if (config->snap_layout_count == 0)
+		config->snap_layout_count = wm_snap_layouts_parse(
+			WM_SNAP_LAYOUTS_DEFAULT, config->snap_layouts,
+			WM_SNAP_LAYOUTS_MAX);
 
 	/* Edge resize snap */
 	config->edge_resize_snap_threshold =
@@ -1194,6 +1276,8 @@ apply_menu_config(struct wm_config *config, struct rc_database *db)
 	/* Window menu file: the init's, else a windowmenu file in the
 	 * config directory (Fluxbox's ~/.fluxbox/windowmenu), else the
 	 * built-in copy of Fluxbox's */
+	config->xwayland_keyboard_grab =
+		rc_get_bool(db, "session.xwayland.keyboardGrab", true);
 	free(config->xwayland_resources);
 	config->xwayland_resources = NULL;
 	val = rc_get_string(db, "session.xwayland.resources");

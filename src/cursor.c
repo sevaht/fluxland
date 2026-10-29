@@ -141,11 +141,32 @@ process_cursor_move(struct wm_server *server, uint32_t time)
 		return;
 	}
 
+	struct wm_view *view = server->grabbed_view;
+
+	/*
+	 * A maximized window pulled down, more than sideways (a window
+	 * thrown to another head goes with it there instead), comes off its
+	 * maximize: back to the size it had, under the pointer
+	 */
+	if (!server->grab_pulled && view->maximized && server->config &&
+	    server->config->max_pull_threshold > 0) {
+		double dy = server->cursor->y - server->grab_pointer_y;
+		double dx = server->cursor->x - server->grab_pointer_x;
+		if (dy >= server->config->max_pull_threshold &&
+		    dy > fabs(dx)) {
+			server->grab_pulled = wm_view_pull_restore(view,
+				server->cursor->x, server->cursor->y,
+				&server->grab_x, &server->grab_y);
+			/* The origin of the grab is the window's own now */
+			memset(&server->grab_geobox, 0,
+				sizeof(server->grab_geobox));
+		}
+	}
+
 	double new_x = server->cursor->x - server->grab_x +
 		server->grab_geobox.x;
 	double new_y = server->cursor->y - server->grab_y +
 		server->grab_geobox.y;
-	struct wm_view *view = server->grabbed_view;
 
 	if (warp_workspace(server, view)) {
 		new_x = server->cursor->x - server->grab_x +
@@ -1007,7 +1028,7 @@ handle_cursor_button(struct wl_listener *listener, void *data)
 
 				/* Save original geometry for restore */
 				if (!sv->maximized && !sv->fullscreen &&
-				    !sv->lhalf && !sv->rhalf) {
+				    !sv->lhalf && !sv->rhalf && !sv->tile.active) {
 					struct wlr_box geo;
 					wm_view_get_geometry(sv, &geo);
 					sv->saved_geometry.x = sv->x;
@@ -1018,8 +1039,28 @@ handle_cursor_button(struct wl_listener *listener, void *data)
 						geo.height;
 				}
 
-				/* The whole frame fills the zone */
-				wm_view_set_frame_box(sv, &sb);
+				/* The whole frame fills the zone: it is no
+				 * longer maximized, or half of a head (the
+				 * top edge maximizes it on this head) */
+				bool was_maximized = sv->maximized;
+				bool was_tiled = sv->maximized || sv->tile.active;
+				struct wlr_box prev_saved = sv->saved_geometry;
+				wm_view_clear_maximized(sv);
+				if (server->snap_zone == WM_SNAP_ZONE_TILE) {
+					wm_view_snap_tile(sv,
+						&server->snap_picker_usable,
+						server->snap_tile,
+						was_tiled ? &prev_saved : NULL,
+						server->grab_head_x,
+						server->grab_head_y);
+				} else if (server->snap_zone ==
+					   WM_SNAP_ZONE_MAXIMIZE)
+					wm_view_snap_maximize(sv, &sb,
+						was_maximized ? &prev_saved : NULL,
+						server->grab_head_x,
+						server->grab_head_y);
+				else
+					wm_view_set_frame_box(sv, &sb);
 
 				snap_preview_destroy(server);
 				if (server->wireframe_active)
@@ -1073,6 +1114,12 @@ handle_cursor_button(struct wl_listener *listener, void *data)
 				}
 				wireframe_hide(server);
 			}
+			/* A window in a maximize state moved by hand goes
+			 * with it to the head it was dropped on */
+			if (server->cursor_mode == WM_CURSOR_MOVE &&
+			    server->grabbed_view)
+				wm_view_settle_on_head(server->grabbed_view,
+					server->grab_head_x, server->grab_head_y);
 			server->cursor_mode = WM_CURSOR_PASSTHROUGH;
 			server->grabbed_view = NULL;
 			position_overlay_destroy(server);

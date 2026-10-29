@@ -316,6 +316,34 @@ leave_maximized(struct wm_view *view, bool resizing)
 	return true;
 }
 
+/*
+ * TileTo cols rows col row [colspan rowspan]: the window into a cell of a
+ * grid over its head, counting from 1; the middle column of three is
+ * "TileTo 3 1 2 1", the top row of two "TileTo 1 2 1 1" (or, 2 rows of 2
+ * columns, "TileTo 2 2 1 1 2 1").  False for a grid or cell that is not one.
+ */
+static bool
+handle_tile_to(struct wm_view *view, const char *argument)
+{
+	int v[6] = { 0, 0, 0, 0, 1, 1 };
+	int n = argument ? sscanf(argument, "%d %d %d %d %d %d", &v[0], &v[1],
+		&v[2], &v[3], &v[4], &v[5]) : 0;
+	int cols = v[0], rows = v[1], col = v[2], row = v[3];
+	int col_span = v[4], row_span = v[5];
+	if (!view || (n != 4 && n != 6) || cols < 1 || cols > 100 ||
+	    rows < 1 || rows > 100 || col < 1 || row < 1 || col_span < 1 ||
+	    row_span < 1 || col - 1 + col_span > cols ||
+	    row - 1 + row_span > rows)
+		return false;
+	/* Boundaries in permille: a cell ends where its neighbour starts */
+	int x = 1000 * (col - 1) / cols;
+	int y = 1000 * (row - 1) / rows;
+	int w = 1000 * (col - 1 + col_span) / cols - x;
+	int h = 1000 * (row - 1 + row_span) / rows - y;
+	wm_view_tile(view, x, y, w, h);
+	return true;
+}
+
 /* The usable area of the window's head, for % and corners */
 static bool
 view_head_area(struct wm_view *view, struct wlr_box *area)
@@ -1513,6 +1541,8 @@ wm_execute_action_on(struct wm_server *server, enum wm_action action,
 		if (view)
 			wm_view_rhalf(view);
 		return true;
+	case WM_ACTION_TILE_TO:
+		return handle_tile_to(view, argument);
 
 	/* Resize by delta */
 	case WM_ACTION_RESIZE_HORIZ:

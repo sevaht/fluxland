@@ -438,6 +438,7 @@ struct wm_server {
 	struct wlr_scene_tree *view_layer_normal;
 	struct wlr_scene_tree *view_layer_above;
 	struct wlr_scene_tree *xdg_popup_tree;
+	struct wlr_scene_tree *xwayland_override_tree;
 	struct wlr_scene_tree *layer_top;
 	struct wlr_scene_tree *layer_overlay;
 
@@ -1239,6 +1240,7 @@ static void wm_xwayland_init(struct wm_server *s) { (void)s; }
 static void wm_xwayland_finish(struct wm_server *s) { (void)s; }
 static void wm_xwayland_apply_resources(struct wm_server *s) { (void)s; }
 static void wm_eis_init(struct wm_server *s) { (void)s; }
+static void wm_xwayland_grab_init(struct wm_server *s) { (void)s; }
 static void wm_eis_finish(struct wm_server *s) { (void)s; }
 static struct wm_wallpaper *wm_wallpaper_create(struct wm_server *s) { (void)s; return NULL; }
 static void wm_wallpaper_destroy(struct wm_wallpaper *wp) { (void)wp; }

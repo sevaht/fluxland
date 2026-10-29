@@ -714,6 +714,7 @@ enum wm_action {
 	WM_ACTION_CASCADE_WINDOWS,
 	WM_ACTION_LHALF,
 	WM_ACTION_RHALF,
+	WM_ACTION_TILE_TO,
 	WM_ACTION_RESIZE_HORIZ,
 	WM_ACTION_RESIZE_VERT,
 	WM_ACTION_FOCUS_LEFT,
@@ -955,6 +956,7 @@ struct wm_view {
 	bool maximized_horiz;
 	bool lhalf;
 	bool rhalf;
+	struct wm_tile { bool active; int x, y, w, h; } tile;
 	bool show_decoration;
 	char *title;
 	bool title_override;
@@ -1233,6 +1235,14 @@ void wm_view_toggle_fullscreen(struct wm_view *v) { (void)v; stub_fullscreen_lis
 void wm_view_minimize(struct wm_view *v) { (void)v; stub_minimize_listener_count++; }
 void wm_view_lhalf(struct wm_view *v) { (void)v; stub_lhalf_count++; }
 void wm_view_rhalf(struct wm_view *v) { (void)v; stub_rhalf_count++; }
+static int stub_tile_count, stub_tile_cell[4];
+void wm_view_tile(struct wm_view *v, int x, int y, int w, int h)
+{
+	(void)v;
+	stub_tile_count++;
+	stub_tile_cell[0] = x; stub_tile_cell[1] = y;
+	stub_tile_cell[2] = w; stub_tile_cell[3] = h;
+}
 void wm_view_resize_by(struct wm_view *v, int w, int h) { (void)v; (void)w; (void)h; stub_resize_by_count++; }
 void wm_view_focus_direction(struct wm_server *s, int dx, int dy) { (void)s; (void)dx; (void)dy; stub_focus_direction_count++; }
 void wm_view_set_head(struct wm_view *v, int h) { (void)v; (void)h; stub_set_head_count++; }
@@ -1417,6 +1427,13 @@ int config_reload(struct wm_config *c) { (void)c; return 0; }
 void wm_idle_notify_activity(struct wm_server *s) { (void)s; stub_idle_notify_count++; }
 bool wm_session_is_locked(struct wm_server *s) { (void)s; return stub_session_locked; }
 bool wm_protocols_kb_shortcuts_inhibited(struct wm_server *s) { (void)s; return stub_kb_inhibited; }
+/* An X11 program's keyboard grab (xwayland-keyboard-grab): a surface, or none */
+static struct wlr_surface *stub_x_grab_surface;
+static int stub_x_grab_focus_count;
+struct wlr_surface *wm_xwayland_grab_surface(struct wm_server *s)
+	{ (void)s; return stub_x_grab_surface; }
+void wm_xwayland_grab_focus(struct wm_server *s)
+	{ (void)s; stub_x_grab_focus_count++; }
 
 void wm_foreign_toplevel_set_minimized(struct wm_view *v, bool m) { (void)v; (void)m; }
 
@@ -1650,6 +1667,7 @@ reset_all_counters(void)
 	stub_toggle_decoration_count = 0;
 	stub_lhalf_count = 0;
 	stub_rhalf_count = 0;
+	stub_tile_count = 0;
 	stub_resize_by_count = 0;
 	stub_focus_direction_count = 0;
 	stub_set_head_count = 0;
@@ -1732,6 +1750,8 @@ reset_all_counters(void)
 	stub_idle_notify_count = 0;
 	stub_session_locked = 0;
 	stub_kb_inhibited = 0;
+	stub_x_grab_surface = NULL;
+	stub_x_grab_focus_count = 0;
 	stub_menu_handle_key_result = 0;
 	stub_keybind_find_result = NULL;
 	stub_active_workspace = NULL;
@@ -2204,6 +2224,43 @@ test_action_maximize_horiz(void)
 	assert(wm_execute_action(&test_server, WM_ACTION_MAXIMIZE_HORIZ, NULL) == true);
 	assert(stub_maximize_horiz_count == 1);
 	printf("  PASS: test_action_maximize_horiz\n");
+}
+
+/* TileTo cols rows col row [colspan rowspan]: a cell of a grid, in permille;
+ * a grid or cell that is not one does nothing and says so */
+static void
+test_action_tile_to(void)
+{
+	setup_with_view();
+
+	/* The middle of three columns: the boundaries 333 and 666 */
+	assert(wm_execute_action(&test_server, WM_ACTION_TILE_TO,
+		"3 1 2 1") == true);
+	assert(stub_tile_count == 1);
+	assert(stub_tile_cell[0] == 333 && stub_tile_cell[1] == 0);
+	assert(stub_tile_cell[2] == 333 && stub_tile_cell[3] == 1000);
+
+	/* Neighbouring cells meet exactly: the last of three ends at 1000 */
+	assert(wm_execute_action(&test_server, WM_ACTION_TILE_TO,
+		"3 1 3 1") == true);
+	assert(stub_tile_cell[0] == 666 && stub_tile_cell[2] == 334);
+
+	/* The whole top row of two rows, with spans */
+	assert(wm_execute_action(&test_server, WM_ACTION_TILE_TO,
+		"2 2 1 1 2 1") == true);
+	assert(stub_tile_cell[0] == 0 && stub_tile_cell[1] == 0);
+	assert(stub_tile_cell[2] == 1000 && stub_tile_cell[3] == 500);
+
+	/* Not a cell: nothing is done */
+	int before = stub_tile_count;
+	const char *bad[] = { NULL, "", "3 1", "3 1 2", "3 1 4 1", "3 1 0 1",
+		"0 1 1 1", "3 1 3 1 2 1", "2 2 1 1 3 1", "a b c d",
+		"3 1 2 1 1" };
+	for (size_t i = 0; i < sizeof(bad) / sizeof(bad[0]); i++)
+		assert(wm_execute_action(&test_server, WM_ACTION_TILE_TO,
+			bad[i]) == false);
+	assert(stub_tile_count == before);
+	printf("  PASS: test_action_tile_to\n");
 }
 
 /* Test LHalf / RHalf actions */
@@ -3117,6 +3174,59 @@ test_handle_key_inhibited_forward(void)
 	assert(stub_seat_notify_key_count == 1);
 	assert(stub_seat_notify_key_keycode == 38);
 	printf("  PASS: test_handle_key_inhibited_forward\n");
+}
+
+/* An X11 program has the keyboard grabbed (xlock): the keys go to it, and the
+ * grabbed surface has the focus first; the emergency keys still work */
+static void
+test_handle_key_x_grab(void)
+{
+	static struct wlr_surface grabbed;
+
+	setup_keyboard();
+	stub_x_grab_surface = &grabbed;
+	stub_nsyms = 1;
+	stub_keysyms[0] = XKB_KEY_a; /* any key, Tab included */
+	stub_modifiers_value = 0;
+	struct wlr_keyboard_key_event event = {
+		.time_msec = 100,
+		.keycode = 23,
+		.state = WL_KEYBOARD_KEY_STATE_PRESSED,
+	};
+	handle_key(&test_kb.key, &event);
+	assert(stub_x_grab_focus_count == 1);
+	assert(stub_seat_notify_key_count == 1);
+	assert(stub_seat_notify_key_keycode == 23);
+
+	/* A binding does not run: Mod4+a is the client's */
+	setup_keyboard();
+	stub_x_grab_surface = &grabbed;
+	stub_nsyms = 1;
+	stub_keysyms[0] = XKB_KEY_a;
+	stub_modifiers_value = WLR_MODIFIER_LOGO;
+	event.keycode = 38;
+	handle_key(&test_kb.key, &event);
+	assert(stub_seat_notify_key_count == 1);
+	assert(stub_seat_notify_key_keycode == 38);
+
+	/* The VT switch is not taken from the user */
+	setup_keyboard();
+	stub_x_grab_surface = &grabbed;
+	stub_nsyms = 1;
+	stub_keysyms[0] = XKB_KEY_XF86Switch_VT_1 + 1;
+	stub_modifiers_value = WLR_MODIFIER_CTRL | WLR_MODIFIER_ALT;
+	handle_key(&test_kb.key, &event);
+	assert(stub_vt_switch_called == 1 && stub_vt_number == 2);
+	assert(stub_seat_notify_key_count == 0);
+
+	/* No grab: the focus is not touched */
+	setup_keyboard();
+	stub_nsyms = 1;
+	stub_keysyms[0] = XKB_KEY_a;
+	stub_modifiers_value = 0;
+	handle_key(&test_kb.key, &event);
+	assert(stub_x_grab_focus_count == 0);
+	printf("  PASS: test_handle_key_x_grab\n");
 }
 
 /* Test: menu consumes the key */
@@ -4578,6 +4688,7 @@ main(void)
 	test_action_maximize_vert();
 	test_action_maximize_horiz();
 	test_action_lhalf_rhalf();
+	test_action_tile_to();
 	test_action_arrange_windows();
 	test_action_arrange_stack();
 	test_action_set_alpha_absolute();
@@ -4632,6 +4743,7 @@ main(void)
 	test_handle_key_inhibited_vt_switch();
 	test_handle_key_inhibited_emergency_exit();
 	test_handle_key_inhibited_forward();
+	test_handle_key_x_grab();
 	test_handle_key_menu_consumed();
 	test_handle_key_binding_match();
 	test_handle_key_no_binding_forward();
