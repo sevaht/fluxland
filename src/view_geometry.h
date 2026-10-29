@@ -77,6 +77,17 @@ void wm_view_settle_on_head(struct wm_view *view, int old_head_x,
 void wm_view_tile(struct wm_view *view, int x, int y, int w, int h);
 
 /*
+ * SnapStep left|right|up|down, as the Windows key + arrow: the next place
+ * for the window on its way in that direction.  Left and right snap to a
+ * half, then onto the next head in that direction (on its other half), and
+ * undo a snap to the other side; up maximizes, or makes a half a top
+ * quarter; down restores a maximized window, makes a half a bottom quarter
+ * and a top quarter a half, and minimizes any other.  False for a direction
+ * that is none.
+ */
+bool wm_view_snap_step(struct wm_view *view, const char *direction);
+
+/*
  * A maximized window dragged by hand is pulled off its maximize: it
  * is no longer maximized and goes back to the size it had before, with
  * the pointer (px, py) in the same place across it and as far down.  The

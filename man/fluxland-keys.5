@@ -247,6 +247,21 @@ exactly, with no gap.  The window follows its head (as with \fBLHalf\fP),
 a later maximize or resize ends it, and the same cell again puts the window
 back where it was.  Numbers outside the grid do nothing.
 .TP
+.BI SnapStep " left" | right | up | down
+The window one step on its way in that direction, as the Windows key with an
+arrow does (a fluxland extension).
+.B left
+and
+.B right
+snap it to that half of its head; at that half already, it goes on to the
+next head in that direction, onto the other half; snapped to the other side,
+it is put back.
+.B up
+maximizes, or turns a half into a top quarter;
+.B down
+restores a maximized window, turns a half into a bottom quarter and a top
+quarter into a half, and minimizes a window that is not snapped.
+.TP
 .BR Shade " (" ShadeWindow "), " ShadeOn ", " ShadeOff ", " Stick " (" StickWindow )
 .TP
 .BR Raise ", " Lower ", " RaiseLayer " [\fIn\fP], " LowerLayer " [\fIn\fP]"

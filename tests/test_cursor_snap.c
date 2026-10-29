@@ -922,6 +922,8 @@ struct wm_server {
 	int grab_head_x, grab_head_y;
 	double grab_pointer_x, grab_pointer_y;
 	bool grab_pulled;
+	struct wlr_box grab_start;
+	bool grab_start_plain;
 	struct wl_display *wl_display;
 	struct wl_event_loop *wl_event_loop;
 
@@ -1351,11 +1353,18 @@ wm_view_snap_maximize(struct wm_view *v, const struct wlr_box *area,
 {
 	(void)v; (void)area; (void)prev; (void)x; (void)y;
 }
+static int stub_snap_tile_count;
+static int stub_snap_tile_cell[4];
+static struct wlr_box stub_snap_tile_prev;
 static void
 wm_view_snap_tile(struct wm_view *v, const struct wlr_box *area,
 	const int cell[4], const struct wlr_box *prev, int x, int y)
 {
-	(void)v; (void)area; (void)cell; (void)prev; (void)x; (void)y;
+	(void)v; (void)area; (void)x; (void)y;
+	stub_snap_tile_count++;
+	memcpy(stub_snap_tile_cell, cell, sizeof(stub_snap_tile_cell));
+	if (prev)
+		stub_snap_tile_prev = *prev;
 }
 static void
 wm_view_settle_on_head(struct wm_view *v, int x, int y)
@@ -3465,6 +3474,9 @@ test_handle_button_release_snap_zone(void)
 	test_server.grabbed_view = &view;
 	test_server.snap_zone = WM_SNAP_ZONE_LEFT_HALF;
 	test_server.snap_preview_box = (struct wlr_box){0, 0, 960, 1080};
+	test_server.grab_start_plain = true;
+	test_server.grab_start = (struct wlr_box){30, 40, 300, 200};
+	stub_snap_tile_count = 0;
 
 	struct wlr_pointer ptr = {0};
 	struct wlr_pointer_button_event event = {
@@ -3478,11 +3490,13 @@ test_handle_button_release_snap_zone(void)
 	test_server.cursor_button.notify(
 		&test_server.cursor_button, &event);
 
-	/* Snap geometry should be applied */
-	assert(view.x == 0);
-	assert(view.y == 0);
-	assert(toplevel.width == 960);
-	assert(toplevel.height == 1080);
+	/* The zone is a cell of the head, and what it is restored to is what
+	 * the drag began with, not where it took the window */
+	assert(stub_snap_tile_count == 1);
+	assert(stub_snap_tile_cell[0] == 0 && stub_snap_tile_cell[1] == 0);
+	assert(stub_snap_tile_cell[2] == 500 && stub_snap_tile_cell[3] == 1000);
+	assert(stub_snap_tile_prev.x == 30 && stub_snap_tile_prev.y == 40);
+	assert(stub_snap_tile_prev.width == 300);
 	assert(test_server.cursor_mode == WM_CURSOR_PASSTHROUGH);
 	assert(test_server.snap_zone == WM_SNAP_ZONE_NONE);
 	teardown_cursor_init();
@@ -3787,6 +3801,9 @@ test_handle_button_release_snap_saves_geometry(void)
 	test_server.grabbed_view = &view;
 	test_server.snap_zone = WM_SNAP_ZONE_RIGHT_HALF;
 	test_server.snap_preview_box = (struct wlr_box){960, 0, 960, 1080};
+	test_server.grab_start_plain = true;
+	test_server.grab_start = (struct wlr_box){100, 150, 800, 600};
+	stub_snap_tile_count = 0;
 
 	struct wlr_pointer ptr = {0};
 	struct wlr_pointer_button_event event = {
@@ -3804,9 +3821,10 @@ test_handle_button_release_snap_saves_geometry(void)
 	assert(view.saved_geometry.y == 150);
 	assert(view.saved_geometry.width == 800);
 	assert(view.saved_geometry.height == 600);
-	/* View now at snap position */
-	assert(view.x == 960);
-	assert(view.y == 0);
+	/* It is tiled to the right half, with that to go back to */
+	assert(stub_snap_tile_count == 1);
+	assert(stub_snap_tile_cell[0] == 500 && stub_snap_tile_cell[2] == 500);
+	assert(stub_snap_tile_prev.x == 100 && stub_snap_tile_prev.width == 800);
 	teardown_cursor_init();
 	printf("  PASS: handle_button_release_snap_saves_geometry\n");
 }

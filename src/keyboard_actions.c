@@ -1543,6 +1543,8 @@ wm_execute_action_on(struct wm_server *server, enum wm_action action,
 		return true;
 	case WM_ACTION_TILE_TO:
 		return handle_tile_to(view, argument);
+	case WM_ACTION_SNAP_STEP:
+		return wm_view_snap_step(view, argument);
 
 	/* Resize by delta */
 	case WM_ACTION_RESIZE_HORIZ:

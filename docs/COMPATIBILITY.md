@@ -338,4 +338,6 @@ Fluxbox's own styles. See [STYLES.md](STYLES.md).
   places a window in a cell of a grid on its head (thirds, a top row, ...), and
   `session.screen0.snapLayoutPicker` adds a Windows 11 style picker of layouts
   (`session.screen0.snapLayouts`) to the top snap zone for doing the same with
-  the mouse.  Fluxbox has neither; with both unused nothing differs.
+  the mouse.  `SnapStep left|right|up|down` steps a window through halves,
+  quarters, maximize and the next head like the Windows key with an arrow.
+  Fluxbox has none of these; with all unused nothing differs.

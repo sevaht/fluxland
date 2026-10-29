@@ -351,6 +351,14 @@ wm_view_begin_interactive(struct wm_view *view,
 		server->grab_pointer_x = server->cursor->x;
 		server->grab_pointer_y = server->cursor->y;
 		server->grab_pulled = false;
+		server->grab_start_plain = !view->maximized &&
+			!view->fullscreen && !view->maximized_vert &&
+			!view->maximized_horiz && !view->lhalf &&
+			!view->rhalf && !view->tile.active;
+		struct wlr_box start_geo;
+		wm_view_get_geometry(view, &start_geo);
+		server->grab_start = (struct wlr_box){ view->x, view->y,
+			start_geo.width, start_geo.height };
 		server->grab_x = server->cursor->x - view->x;
 		server->grab_y = server->cursor->y - view->y;
 		/* Reset grab_geobox so stale resize values don't affect move */

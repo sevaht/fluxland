@@ -770,6 +770,8 @@ struct wm_server {
 	int grab_head_x, grab_head_y;
 	double grab_pointer_x, grab_pointer_y;
 	bool grab_pulled;
+	struct wlr_box grab_start;
+	bool grab_start_plain;
 	struct wl_display *wl_display;
 	struct wl_event_loop *wl_event_loop;
 	struct wlr_backend *backend;

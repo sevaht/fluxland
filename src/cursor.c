@@ -1026,41 +1026,49 @@ handle_cursor_button(struct wl_listener *listener, void *data)
 				struct wlr_box sb =
 					server->snap_preview_box;
 
-				/* Save original geometry for restore */
-				if (!sv->maximized && !sv->fullscreen &&
-				    !sv->lhalf && !sv->rhalf && !sv->tile.active) {
-					struct wlr_box geo;
-					wm_view_get_geometry(sv, &geo);
-					sv->saved_geometry.x = sv->x;
-					sv->saved_geometry.y = sv->y;
-					sv->saved_geometry.width =
-						geo.width;
-					sv->saved_geometry.height =
-						geo.height;
-				}
-
-				/* The whole frame fills the zone: it is no
-				 * longer maximized, or half of a head (the
-				 * top edge maximizes it on this head) */
-				bool was_maximized = sv->maximized;
-				bool was_tiled = sv->maximized || sv->tile.active;
+				/* What it is restored to: what it was before
+				 * the drag began (not where the drag took it,
+				 * at an edge), or, if it was snapped or
+				 * maximized already, what it was restored to */
+				if (server->grab_start_plain)
+					sv->saved_geometry = server->grab_start;
 				struct wlr_box prev_saved = sv->saved_geometry;
+
+				/* Every zone but the top edge is a cell of the
+				 * head, as the layout picker's are */
+				static const int zone_cells[][4] = {
+					[WM_SNAP_ZONE_LEFT_HALF] =
+						{ 0, 0, 500, 1000 },
+					[WM_SNAP_ZONE_RIGHT_HALF] =
+						{ 500, 0, 500, 1000 },
+					[WM_SNAP_ZONE_BOTTOM_HALF] =
+						{ 0, 500, 1000, 500 },
+					[WM_SNAP_ZONE_TOPLEFT] =
+						{ 0, 0, 500, 500 },
+					[WM_SNAP_ZONE_TOPRIGHT] =
+						{ 500, 0, 500, 500 },
+					[WM_SNAP_ZONE_BOTTOMLEFT] =
+						{ 0, 500, 500, 500 },
+					[WM_SNAP_ZONE_BOTTOMRIGHT] =
+						{ 500, 500, 500, 500 },
+				};
 				wm_view_clear_maximized(sv);
-				if (server->snap_zone == WM_SNAP_ZONE_TILE) {
+				if (server->snap_zone == WM_SNAP_ZONE_MAXIMIZE) {
+					wm_view_snap_maximize(sv, &sb,
+						&prev_saved,
+						server->grab_head_x,
+						server->grab_head_y);
+				} else {
 					wm_view_snap_tile(sv,
 						&server->snap_picker_usable,
-						server->snap_tile,
-						was_tiled ? &prev_saved : NULL,
+						server->snap_zone ==
+						WM_SNAP_ZONE_TILE ?
+						server->snap_tile :
+						zone_cells[server->snap_zone],
+						&prev_saved,
 						server->grab_head_x,
 						server->grab_head_y);
-				} else if (server->snap_zone ==
-					   WM_SNAP_ZONE_MAXIMIZE)
-					wm_view_snap_maximize(sv, &sb,
-						was_maximized ? &prev_saved : NULL,
-						server->grab_head_x,
-						server->grab_head_y);
-				else
-					wm_view_set_frame_box(sv, &sb);
+				}
 
 				snap_preview_destroy(server);
 				if (server->wireframe_active)

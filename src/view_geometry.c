@@ -7,6 +7,7 @@
 
 #define _POSIX_C_SOURCE 200809L
 #include <stdbool.h>
+#include <stdlib.h>
 #include <string.h>
 #include <wlr/types/wlr_cursor.h>
 #include <wlr/types/wlr_xdg_shell.h>
@@ -574,6 +575,38 @@ wm_view_clear_maximized(struct wm_view *view)
 	}
 }
 
+/* A cell's frame: its edges are where the permille boundaries fall, the same
+ * pixel for the two cells either side of one */
+static void
+tile_frame(const struct wm_tile *tile, const struct wlr_box *area,
+	struct wlr_box *frame);
+
+/* How near the corner of a snapped window has to be to where it is snapped
+ * to for it to count as there, in pixels */
+#define SNAP_SLACK 5
+
+/* Whether a half or tiled window is still where it was put: dragging it
+ * away is the user's own doing, which is not undone */
+static bool
+snapped_in_place(struct wm_view *view)
+{
+	struct wm_tile cell = view->tile;
+	if (view->lhalf)
+		cell = (struct wm_tile){ true, 0, 0, 500, 1000 };
+	else if (view->rhalf)
+		cell = (struct wm_tile){ true, 500, 0, 500, 1000 };
+	else if (!view->tile.active)
+		return true;
+
+	struct wlr_box area, want, frame;
+	if (!wm_view_maximize_area(view, &area))
+		return true;
+	tile_frame(&cell, &area, &want);
+	wm_view_frame_box(view, &frame);
+	return abs(frame.x - want.x) <= SNAP_SLACK &&
+		abs(frame.y - want.y) <= SNAP_SLACK;
+}
+
 void
 wm_view_settle_on_head(struct wm_view *view, int old_head_x, int old_head_y)
 {
@@ -581,6 +614,14 @@ wm_view_settle_on_head(struct wm_view *view, int old_head_x, int old_head_y)
 	    view->maximized_horiz || view->lhalf || view->rhalf ||
 	    view->tile.active || view->fullscreen))
 		return;
+	/* A half or a tile dragged elsewhere stays where it is dropped, free
+	 * of its snap; a maximized window goes with its head */
+	if (!view->maximized && !view->maximized_vert &&
+	    !view->maximized_horiz && !view->fullscreen &&
+	    !snapped_in_place(view)) {
+		wm_view_clear_maximized(view);
+		return;
+	}
 	struct wm_output *output = wm_output_for_view(view);
 	if (output) {
 		struct wlr_box head;
@@ -591,8 +632,6 @@ wm_view_settle_on_head(struct wm_view *view, int old_head_x, int old_head_y)
 	wm_view_refit(view);
 }
 
-/* A cell's frame: its edges are where the permille boundaries fall, the same
- * pixel for the two cells either side of one */
 static void
 tile_frame(const struct wm_tile *tile, const struct wlr_box *area,
 	struct wlr_box *frame)
@@ -701,6 +740,220 @@ wm_view_snap_maximize(struct wm_view *view, const struct wlr_box *area,
 		view->saved_geometry.x += head.x - old_head_x;
 		view->saved_geometry.y += head.y - old_head_y;
 	}
+}
+
+/* Where a window is in the SnapStep ladder: which side (-1 left, 1 right,
+ * 0 neither) and row (-1 top, 1 bottom, 0 the whole height) of its head it
+ * holds, as a half or a quarter */
+static void
+snap_position(const struct wm_view *view, int *side, int *row)
+{
+	*side = *row = 0;
+	if (view->lhalf)
+		*side = -1;
+	else if (view->rhalf)
+		*side = 1;
+	else if (view->tile.active && view->tile.w == 500) {
+		if (view->tile.x == 0)
+			*side = -1;
+		else if (view->tile.x == 500)
+			*side = 1;
+		if (*side && view->tile.h == 500)
+			*row = view->tile.y == 0 ? -1 : 1;
+		else if (*side && view->tile.h != 1000)
+			*side = 0;
+	}
+}
+
+/* Back to the size the window had before it was snapped, on the head it is
+ * on now: where it was is on another head if it was snapped there since,
+ * and it goes to the same place relative to this head's size */
+static void
+snap_undo(struct wm_view *view)
+{
+	struct wm_output *here = wm_output_for_view(view);
+	struct wlr_box saved = view->saved_geometry;
+	if (view->lhalf)
+		wm_view_lhalf(view);
+	else if (view->rhalf)
+		wm_view_rhalf(view);
+	else if (view->tile.active)
+		wm_view_tile(view, view->tile.x, view->tile.y, view->tile.w,
+			view->tile.h);
+
+	struct wm_output *was = wm_output_for_view(view);
+	if (!here || !was || here == was)
+		return;
+	struct wlr_box to, from, frame;
+	wm_output_layout_box(here, &to);
+	wm_output_layout_box(was, &from);
+	if (wlr_box_empty(&to) || wlr_box_empty(&from))
+		return;
+	wm_view_frame_box(view, &frame);
+	/* The client has not answered the resize yet: the frame it will have
+	 * is the saved size with the decorations around it */
+	int top, bottom, left, right;
+	wm_view_frame_extents(view, &top, &bottom, &left, &right);
+	frame.width = saved.width + left + right;
+	frame.height = saved.height + top + bottom;
+	int x = to.x + (int)((long)(frame.x - from.x) * to.width / from.width);
+	int y = to.y + (int)((long)(frame.y - from.y) * to.height / from.height);
+	if (x + frame.width > to.x + to.width)
+		x = to.x + to.width - frame.width;
+	if (y + frame.height > to.y + to.height)
+		y = to.y + to.height - frame.height;
+	if (x < to.x)
+		x = to.x;
+	if (y < to.y)
+		y = to.y;
+	wm_view_move(view, x, y);
+}
+
+/* The half (row 0) or quarter of a side of the head */
+static void
+snap_to(struct wm_view *view, int side, int row)
+{
+	int h = row ? 500 : 1000;
+	wm_view_tile(view, side < 0 ? 0 : 500, row > 0 ? 500 : 0, 500, h);
+}
+
+/* The head in a direction from the window's, if there is one */
+static struct wm_output *
+adjacent_head(struct wm_view *view, int side)
+{
+	struct wm_output *cur = wm_output_for_view(view);
+	if (!cur)
+		return NULL;
+	struct wlr_box box;
+	wm_output_layout_box(cur, &box);
+	/* The nearest head on that side that shares some of its height */
+	struct wm_output *best = NULL;
+	int best_gap = 0;
+	struct wm_output *out;
+	wl_list_for_each(out, &view->server->outputs, link) {
+		struct wlr_box o;
+		if (out == cur)
+			continue;
+		wm_output_layout_box(out, &o);
+		if (wlr_box_empty(&o) || o.y >= box.y + box.height ||
+		    o.y + o.height <= box.y)
+			continue;
+		int gap = side < 0 ? box.x - (o.x + o.width) :
+			o.x - (box.x + box.width);
+		if (gap < 0)
+			continue;
+		if (!best || gap < best_gap) {
+			best = out;
+			best_gap = gap;
+		}
+	}
+	return best;
+}
+
+/*
+ * A window that sits exactly where a half or quarter of its head is, though
+ * it was put there by hand (dragged away from a snap and back, say), is
+ * taken for snapped: its next step is the one a snapped window takes.  Where
+ * it was before is not known then, and what it was told earlier would be
+ * stale after a drag, so putting it back goes to a window two thirds of the
+ * head, in the middle of it.  Its place must match to a few pixels (it is
+ * only so by being dropped there, or snapped); its size only to a character
+ * cell, as a terminal cannot be exactly half a head.
+ */
+#define SNAP_ADOPT_SLACK SNAP_SLACK
+static void
+snap_adopt(struct wm_view *view)
+{
+	struct wlr_box area, frame;
+	if (!wm_view_maximize_area(view, &area))
+		return;
+	wm_view_frame_box(view, &frame);
+
+	static const int cells[6][4] = {
+		{ 0, 0, 500, 1000 }, { 500, 0, 500, 1000 },
+		{ 0, 0, 500, 500 }, { 500, 0, 500, 500 },
+		{ 0, 500, 500, 500 }, { 500, 500, 500, 500 },
+	};
+	for (int i = 0; i < 6; i++) {
+		int x = area.x + area.width * cells[i][0] / 1000;
+		int y = area.y + area.height * cells[i][1] / 1000;
+		int w = area.x + area.width * (cells[i][0] + cells[i][2]) / 1000 - x;
+		int h = area.y + area.height * (cells[i][1] + cells[i][3]) / 1000 - y;
+		/* A terminal's size comes in character cells */
+		if (abs(frame.x - x) > SNAP_ADOPT_SLACK ||
+		    abs(frame.y - y) > SNAP_ADOPT_SLACK ||
+		    abs(frame.width - w) > 48 || abs(frame.height - h) > 48)
+			continue;
+
+		struct wlr_box *saved = &view->saved_geometry;
+		saved->width = area.width * 2 / 3;
+		saved->height = area.height * 2 / 3;
+		saved->x = area.x + (area.width - saved->width) / 2;
+		saved->y = area.y + (area.height - saved->height) / 2;
+		view->tile = (struct wm_tile){ true, cells[i][0], cells[i][1],
+			cells[i][2], cells[i][3] };
+		return;
+	}
+}
+
+bool
+wm_view_snap_step(struct wm_view *view, const char *direction)
+{
+	if (!direction)
+		return false;
+	int dx = 0, dy = 0;
+	if (!strcmp(direction, "left"))
+		dx = -1;
+	else if (!strcmp(direction, "right"))
+		dx = 1;
+	else if (!strcmp(direction, "up"))
+		dy = -1;
+	else if (!strcmp(direction, "down"))
+		dy = 1;
+	else
+		return false;
+	if (!view || !wm_view_surface(view) || !view->scene_tree->node.enabled ||
+	    view->fullscreen)
+		return true;
+
+	if (!view->maximized && !view->maximized_vert &&
+	    !view->maximized_horiz && !view->lhalf && !view->rhalf &&
+	    !view->tile.active)
+		snap_adopt(view);
+
+	int side, row;
+	snap_position(view, &side, &row);
+	bool plain = !view->maximized && !view->maximized_vert &&
+		!view->maximized_horiz && !view->lhalf && !view->rhalf &&
+		!view->tile.active;
+
+	if (dx) {
+		if (side == dx) {
+			/* At the edge: on to the next head, on its other half */
+			struct wm_output *next = adjacent_head(view, dx);
+			if (next) {
+				move_view_to_output(view, next);
+				snap_to(view, -dx, row);
+			}
+		} else if (side == -dx && row == 0) {
+			snap_undo(view);
+		} else {
+			snap_to(view, dx, side ? row : 0);
+		}
+	} else if (dy < 0) {
+		if (plain)
+			wm_view_toggle_maximize(view);
+		else if (side && row >= 0)
+			snap_to(view, side, row - 1);
+	} else {
+		if (view->maximized)
+			wm_view_toggle_maximize(view);
+		else if (side && row <= 0)
+			snap_to(view, side, row + 1);
+		else if (plain)
+			wm_view_minimize(view);
+	}
+	return true;
 }
 
 void

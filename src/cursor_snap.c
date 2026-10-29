@@ -465,8 +465,10 @@ snap_zone_check(struct wm_server *server)
 	}
 
 	/* Zone changed — update the preview */
-	if ((int)zone != server->snap_zone) {
+	if ((int)zone != server->snap_zone ||
+	    memcmp(&usable, &server->snap_picker_usable, sizeof(usable)) != 0) {
 		server->snap_zone = zone;
+		server->snap_picker_usable = usable;
 		server->snap_preview_box = snap_zone_geometry(zone, &usable);
 		snap_preview_update(server, &server->snap_preview_box);
 	}

@@ -209,6 +209,11 @@ struct wm_server {
 	 * window has since been pulled off its maximize (wm_view_pull_restore) */
 	double grab_pointer_x, grab_pointer_y;
 	bool grab_pulled;
+	/* What a move began with: the window's place and size, when it was in
+	 * no snapped or maximized state, which a snap by the drag is to be
+	 * restored to */
+	struct wlr_box grab_start;
+	bool grab_start_plain;
 
 	/* Show window position/size overlay during move/resize */
 	bool show_position;

@@ -119,6 +119,7 @@ static const struct action_map actions[] = {
 	{"Quit",               WM_ACTION_EXIT},
 	{"RHalf",              WM_ACTION_RHALF},
 	{"TileTo",             WM_ACTION_TILE_TO},
+	{"SnapStep",           WM_ACTION_SNAP_STEP},
 	{"Raise",              WM_ACTION_RAISE},
 	{"RaiseLayer",         WM_ACTION_RAISE_LAYER},
 	{"Remember",           WM_ACTION_REMEMBER},

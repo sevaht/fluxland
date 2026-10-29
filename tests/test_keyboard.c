@@ -715,6 +715,7 @@ enum wm_action {
 	WM_ACTION_LHALF,
 	WM_ACTION_RHALF,
 	WM_ACTION_TILE_TO,
+	WM_ACTION_SNAP_STEP,
 	WM_ACTION_RESIZE_HORIZ,
 	WM_ACTION_RESIZE_VERT,
 	WM_ACTION_FOCUS_LEFT,
@@ -1236,6 +1237,9 @@ void wm_view_minimize(struct wm_view *v) { (void)v; stub_minimize_listener_count
 void wm_view_lhalf(struct wm_view *v) { (void)v; stub_lhalf_count++; }
 void wm_view_rhalf(struct wm_view *v) { (void)v; stub_rhalf_count++; }
 static int stub_tile_count, stub_tile_cell[4];
+static int stub_snap_step_count;
+bool wm_view_snap_step(struct wm_view *v, const char *d)
+{ (void)v; stub_snap_step_count++; return d != NULL; }
 void wm_view_tile(struct wm_view *v, int x, int y, int w, int h)
 {
 	(void)v;
@@ -2261,6 +2265,18 @@ test_action_tile_to(void)
 			bad[i]) == false);
 	assert(stub_tile_count == before);
 	printf("  PASS: test_action_tile_to\n");
+}
+
+/* SnapStep goes to the window code with its direction */
+static void
+test_action_snap_step(void)
+{
+	setup_with_view();
+	int before = stub_snap_step_count;
+	assert(wm_execute_action(&test_server, WM_ACTION_SNAP_STEP, "left"));
+	assert(stub_snap_step_count == before + 1);
+	assert(!wm_execute_action(&test_server, WM_ACTION_SNAP_STEP, NULL));
+	printf("  PASS: test_action_snap_step\n");
 }
 
 /* Test LHalf / RHalf actions */
@@ -4689,6 +4705,7 @@ main(void)
 	test_action_maximize_horiz();
 	test_action_lhalf_rhalf();
 	test_action_tile_to();
+	test_action_snap_step();
 	test_action_arrange_windows();
 	test_action_arrange_stack();
 	test_action_set_alpha_absolute();
