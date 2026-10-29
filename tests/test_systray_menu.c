@@ -166,6 +166,9 @@ void wm_systray_menu_open(struct wm_systray *systray, const char *bus_name,
 	int x, int y);
 void wm_systray_menu_activate(struct wm_server *server, const char *spec);
 void wm_systray_menu_cancel_all(struct wm_systray *systray);
+static int g_bus_kicks;
+void wm_systray_bus_kick(struct wm_systray *systray)
+{ (void)systray; g_bus_kicks++; }
 
 #include "../src/systray_menu.c"
 

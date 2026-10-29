@@ -53,6 +53,8 @@ struct wm_systray {
 	struct wm_server *server;
 	sd_bus *bus;
 	struct wl_event_source *bus_event;
+	struct wl_event_source *bus_timer; /* sd-bus's own timeout */
+	struct wl_event_source *bus_idle;  /* a sync of the above is due */
 	struct wl_list items;  /* wm_systray_item.link */
 	int item_count;
 	bool vertical;         /* down a turned toolbar */
@@ -87,6 +89,13 @@ bool wm_systray_handle_click(struct wm_systray *systray,
 	double local_x, double local_y, uint32_t button);
 
 /* Call a method (Activate, ContextMenu...) of a tray item, at (x, y) */
+/*
+ * Something was sent on the tray's D-Bus connection: have the event loop
+ * watch it for being writable if it did not all go.  (Other messages are
+ * handled while the connection is read and need nothing.)
+ */
+void wm_systray_bus_kick(struct wm_systray *systray);
+
 void wm_systray_call_item_method(struct wm_systray *systray,
 	const char *bus_name, const char *object_path, const char *method,
 	int x, int y);

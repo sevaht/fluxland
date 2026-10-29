@@ -182,6 +182,8 @@ struct wm_view {
 	 * (enum wm_pseudo_rule), and the copy of the desktop under it */
 	int pseudo_rule;
 	struct wlr_scene_tree *pseudo_tree;
+	struct wlr_box pseudo_box;	/* the content it was made for */
+	unsigned pseudo_generation;	/* and which state of the desktop */
 
 	/* True if this view is docked into the slit (skip normal WM handling) */
 	bool docked;

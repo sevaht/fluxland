@@ -16,6 +16,8 @@
 #include <cairo.h>
 #include <drm_fourcc.h>
 #include <errno.h>
+#include <poll.h>
+#include <time.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -414,6 +416,7 @@ query_property(struct wm_systray_item *item, const char *property,
 	if (r < 0) {
 		free(q);
 	}
+	wm_systray_bus_kick(item->systray);
 }
 
 /* Draw the item again, and the toolbar around it */
@@ -986,6 +989,48 @@ handle_name_owner_changed(sd_bus_message *msg, void *userdata,
 
 /* --- wl_event_loop integration --- */
 
+/*
+ * What sd-bus wants of the event loop changes with what it has to send and
+ * wait for: readable always, writable only while a message is half sent,
+ * and a timer for its method call timeouts.  (A socket is nearly always
+ * writable: asking for that all the time wakes the loop without end.)
+ */
+static void
+bus_sync_sources(struct wm_systray *systray)
+{
+	if (!systray->bus || !systray->bus_event)
+		return;
+	int events = sd_bus_get_events(systray->bus);
+	if (events < 0)
+		return;
+	uint32_t mask = WL_EVENT_HANGUP | WL_EVENT_ERROR;
+	if (events & POLLIN)
+		mask |= WL_EVENT_READABLE;
+	if (events & POLLOUT)
+		mask |= WL_EVENT_WRITABLE;
+	wl_event_source_fd_update(systray->bus_event, mask);
+
+	if (!systray->bus_timer)
+		return;
+	uint64_t usec = UINT64_MAX;
+	if (sd_bus_get_timeout(systray->bus, &usec) < 0 ||
+	    usec == UINT64_MAX) {
+		wl_event_source_timer_update(systray->bus_timer, 0);
+		return;
+	}
+	struct timespec now;
+	clock_gettime(CLOCK_MONOTONIC, &now);
+	uint64_t now_usec = (uint64_t)now.tv_sec * 1000000 +
+		(uint64_t)now.tv_nsec / 1000;
+	uint64_t wait = usec > now_usec ? usec - now_usec : 0;
+	uint64_t ms = (wait + 999) / 1000;
+	if (ms < 1)
+		ms = 1;
+	if (ms > INT32_MAX)
+		ms = INT32_MAX;
+	wl_event_source_timer_update(systray->bus_timer, (int)ms);
+}
+
 static int
 bus_dispatch(int fd, uint32_t mask, void *data)
 {
@@ -1002,7 +1047,34 @@ bus_dispatch(int fd, uint32_t mask, void *data)
 			strerror(-r));
 	}
 
+	bus_sync_sources(systray);
 	return 0;
+}
+
+static int
+bus_timeout(void *data)
+{
+	bus_dispatch(-1, 0, data);
+	return 0;
+}
+
+static void
+bus_idle_sync(void *data)
+{
+	struct wm_systray *systray = data;
+	systray->bus_idle = NULL;
+	bus_sync_sources(systray);
+}
+
+void
+wm_systray_bus_kick(struct wm_systray *systray)
+{
+	/* Something was sent: whether it all went is for the next sync */
+	if (systray && !systray->bus_idle && systray->server &&
+	    systray->server->wl_event_loop)
+		systray->bus_idle = wl_event_loop_add_idle(
+			systray->server->wl_event_loop, bus_idle_sync,
+			systray);
 }
 
 /* --- Public API --- */
@@ -1095,9 +1167,11 @@ wm_systray_create(struct wm_server *server)
 	if (fd >= 0) {
 		systray->bus_event = wl_event_loop_add_fd(
 			server->wl_event_loop, fd,
-			WL_EVENT_READABLE | WL_EVENT_WRITABLE |
-			WL_EVENT_HANGUP | WL_EVENT_ERROR,
+			WL_EVENT_READABLE | WL_EVENT_HANGUP | WL_EVENT_ERROR,
 			bus_dispatch, systray);
+		systray->bus_timer = wl_event_loop_add_timer(
+			server->wl_event_loop, bus_timeout, systray);
+		bus_sync_sources(systray);
 	}
 
 	/* Create scene tree in layer_top (same parent as toolbar) */
@@ -1123,6 +1197,12 @@ wm_systray_destroy(struct wm_systray *systray)
 		systray_item_destroy(item);
 	}
 
+	if (systray->bus_idle) {
+		wl_event_source_remove(systray->bus_idle);
+	}
+	if (systray->bus_timer) {
+		wl_event_source_remove(systray->bus_timer);
+	}
 	if (systray->bus_event) {
 		wl_event_source_remove(systray->bus_event);
 	}
@@ -1246,6 +1326,7 @@ wm_systray_call_item_method(struct wm_systray *systray, const char *bus_name,
 	sd_bus_call_method_async(systray->bus, NULL, bus_name, object_path,
 		"org.kde.StatusNotifierItem", method, NULL, NULL,
 		"ii", (int32_t)x, (int32_t)y);
+	wm_systray_bus_kick(systray);
 	wlr_log(WLR_DEBUG, "systray: %s on %s", method, bus_name);
 }
 
@@ -1329,8 +1410,10 @@ wm_systray_handle_click(struct wm_systray *systray,
 				    item->bus_name, item->object_path,
 				    "org.kde.StatusNotifierItem", "Activate",
 				    handle_activate_reply, aq, "ii",
-				    (int32_t)x, (int32_t)y) >= 0)
+				    (int32_t)x, (int32_t)y) >= 0) {
+				wm_systray_bus_kick(systray);
 				return true;
+			}
 			free(aq);
 		}
 	}

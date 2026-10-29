@@ -31,6 +31,7 @@
 #include "server.h"
 #include "toolbar.h"
 #include "util.h"
+#include "pseudo_transparency.h"
 #include "view.h"
 #include "view_geometry.h"
 #include "workspace.h"
@@ -43,6 +44,7 @@ handle_output_frame(struct wl_listener *listener, void *data)
 	struct wlr_scene_output *scene_output = output->scene_output;
 
 	wm_xwayland_sync_positions(output->server);
+	wm_pseudo_sync(output->server);
 	wm_foreign_toplevel_sync_outputs(output->server);
 	wlr_scene_output_commit(scene_output, NULL);
 	wm_session_lock_output_frame(output->server, output);

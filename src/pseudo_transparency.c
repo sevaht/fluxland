@@ -6,6 +6,7 @@
  */
 
 #include <stdlib.h>
+#include <string.h>
 #include <wlr/types/wlr_buffer.h>
 #include <wlr/types/wlr_scene.h>
 
@@ -16,6 +17,10 @@
 #include "view.h"
 
 #define PSEUDO_SOURCES_MAX 64
+
+/* Which state of the desktop the copies under windows are of: it moves on
+ * whenever the wallpaper (or the outputs, or a setting) does */
+static unsigned background_generation = 1;
 
 /* A piece of the desktop under a window */
 struct pseudo_piece {
@@ -141,6 +146,7 @@ destroy_pieces(struct wm_view *view)
 		wlr_scene_node_destroy(&view->pseudo_tree->node);
 		view->pseudo_tree = NULL;
 	}
+	view->pseudo_generation = 0;
 }
 
 void
@@ -161,6 +167,14 @@ wm_pseudo_update(struct wm_view *view)
 	wm_view_frame_extents(view, &top, &bottom, &left, &right);
 	struct wlr_box window = { view->x + left, view->y + top, geo.width,
 		geo.height };
+
+	/* Nothing has moved, and the desktop is as it was: the copy is right */
+	if (view->pseudo_tree &&
+	    view->pseudo_generation == background_generation &&
+	    memcmp(&window, &view->pseudo_box, sizeof(window)) == 0)
+		return;
+	view->pseudo_box = window;
+	view->pseudo_generation = background_generation;
 
 	struct pseudo_piece pieces[PSEUDO_SOURCES_MAX];
 	int count = 0;
@@ -239,7 +253,18 @@ wm_pseudo_update(struct wm_view *view)
 void
 wm_pseudo_update_all(struct wm_server *server)
 {
+	background_generation++;
 	struct wm_view *view;
 	wl_list_for_each(view, &server->views, link)
 		wm_pseudo_update(view);
+}
+
+void
+wm_pseudo_sync(struct wm_server *server)
+{
+	struct wm_view *view;
+	wl_list_for_each(view, &server->views, link) {
+		if (view->pseudo_tree || wm_view_pseudo_transparent(view))
+			wm_pseudo_update(view);
+	}
 }

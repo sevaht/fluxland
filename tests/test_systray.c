@@ -473,10 +473,26 @@ int sd_bus_match_signal(sd_bus *bus, sd_bus_slot **slot,
 	return 0;
 }
 
+static int g_bus_events;
+static uint64_t g_bus_timeout;
+
 int sd_bus_get_fd(sd_bus *bus)
 {
 	(void)bus;
 	return -1;
+}
+
+int sd_bus_get_events(sd_bus *bus)
+{
+	(void)bus;
+	return g_bus_events;
+}
+
+int sd_bus_get_timeout(sd_bus *bus, uint64_t *timeout_usec)
+{
+	(void)bus;
+	*timeout_usec = g_bus_timeout;
+	return 0;
 }
 
 int sd_bus_process(sd_bus *bus, sd_bus_message **ret)
@@ -632,6 +648,47 @@ wl_event_source_remove(struct wl_event_source *source)
 	(void)source;
 }
 
+typedef int (*wl_event_loop_timer_func_t)(void *data);
+typedef void (*wl_event_loop_idle_func_t)(void *data);
+
+static struct wl_event_source *
+wl_event_loop_add_timer(struct wl_event_loop *loop,
+	wl_event_loop_timer_func_t func, void *data)
+{
+	(void)loop; (void)func; (void)data;
+	return NULL;
+}
+
+static struct wl_event_source *
+wl_event_loop_add_idle(struct wl_event_loop *loop,
+	wl_event_loop_idle_func_t func, void *data)
+{
+	(void)loop; (void)func; (void)data;
+	return NULL;
+}
+
+/* What the tray last asked of the event loop for sd-bus */
+static uint32_t g_fd_mask;
+static int g_fd_updates;
+static int g_timer_ms = -1;
+
+static int
+wl_event_source_fd_update(struct wl_event_source *source, uint32_t mask)
+{
+	(void)source;
+	g_fd_mask = mask;
+	g_fd_updates++;
+	return 0;
+}
+
+static int
+wl_event_source_timer_update(struct wl_event_source *source, int ms)
+{
+	(void)source;
+	g_timer_ms = ms;
+	return 0;
+}
+
 /* --- Stub wm types for server.h and toolbar.h --- */
 
 struct wm_toolbar {
@@ -684,6 +741,8 @@ struct wm_systray {
 	struct wm_server *server;
 	sd_bus *bus;
 	struct wl_event_source *bus_event;
+	struct wl_event_source *bus_timer;
+	struct wl_event_source *bus_idle;
 	struct wl_list items;
 	int item_count;
 	struct wlr_scene_tree *scene_tree;
@@ -697,6 +756,7 @@ struct wm_systray {
 };
 
 /* Forward declarations of public API (normally from systray.h) */
+void wm_systray_bus_kick(struct wm_systray *systray);
 struct wm_systray *wm_systray_create(struct wm_server *server);
 void wm_systray_destroy(struct wm_systray *systray);
 void wm_systray_layout(struct wm_systray *systray, int x, int y,
@@ -1119,6 +1179,54 @@ test_handle_click_buttons(void)
 
 	destroy_test_systray(systray);
 	printf("  PASS: test_handle_click_buttons\n");
+}
+
+/*
+ * What the tray asks of the event loop for its D-Bus connection: readable
+ * always, writable only while sd-bus has something half sent (a socket is
+ * nearly always writable, and asking for that all the time kept the whole
+ * compositor busy), and a timer only while sd-bus has a timeout.
+ */
+static void
+test_bus_sources_follow_what_sd_bus_wants(void)
+{
+	struct wm_systray *systray = make_test_systray();
+	reset_globals();
+	/* any non-NULL bus or source will do: the stubs only record */
+	sd_bus *saved_bus = systray->bus;
+	systray->bus = (sd_bus *)systray;
+	systray->bus_event = (struct wl_event_source *)systray;
+	systray->bus_timer = (struct wl_event_source *)&systray->x;
+
+	g_bus_events = POLLIN;
+	g_bus_timeout = UINT64_MAX;
+	g_timer_ms = -1;
+	bus_sync_sources(systray);
+	assert(g_fd_mask & WL_EVENT_READABLE);
+	assert(!(g_fd_mask & WL_EVENT_WRITABLE));
+	assert(g_timer_ms == 0);	/* no timeout: the timer is off */
+
+	g_bus_events = POLLIN | POLLOUT;
+	bus_sync_sources(systray);
+	assert(g_fd_mask & WL_EVENT_WRITABLE);
+
+	/* a timeout in a moment: a timer of at least a millisecond */
+	struct timespec now;
+	clock_gettime(CLOCK_MONOTONIC, &now);
+	g_bus_timeout = (uint64_t)now.tv_sec * 1000000 +
+		(uint64_t)now.tv_nsec / 1000 + 250000;
+	bus_sync_sources(systray);
+	assert(g_timer_ms >= 1 && g_timer_ms <= 251);
+	/* one that has passed already: as soon as can be */
+	g_bus_timeout = 1;
+	bus_sync_sources(systray);
+	assert(g_timer_ms == 1);
+
+	systray->bus = saved_bus;
+	systray->bus_event = NULL;
+	systray->bus_timer = NULL;
+	destroy_test_systray(systray);
+	printf("  PASS: test_bus_sources_follow_what_sd_bus_wants\n");
 }
 
 /*
@@ -2506,6 +2614,7 @@ main(void)
 	test_handle_click_empty();
 	test_handle_click_buttons();
 	test_left_click_menu_when_there_is_no_activate();
+	test_bus_sources_follow_what_sd_bus_wants();
 	test_find_item_by_bus_name();
 	test_item_destroy();
 	test_layout_small_height();

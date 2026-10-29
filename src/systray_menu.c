@@ -448,6 +448,7 @@ wm_systray_menu_open(struct wm_systray *systray, const char *bus_name,
 			handle_layout, req, 0);
 	}
 	sd_bus_message_unref(call);
+	wm_systray_bus_kick(systray);
 	if (r < 0) {
 		wlr_log(WLR_DEBUG, "systray: GetLayout to %s failed: %s",
 			bus_name, strerror(-r));
@@ -496,6 +497,7 @@ wm_systray_menu_activate(struct wm_server *server, const char *spec)
 	sd_bus_call_method_async(server->systray->bus, NULL, bus_name, path,
 		DBUSMENU_IFACE, "Event", NULL, NULL, "isvu",
 		(int32_t)id, "clicked", "i", (int32_t)0, time_ms);
+	wm_systray_bus_kick(server->systray);
 	wlr_log(WLR_DEBUG, "systray: clicked entry %d of %s", id, bus_name);
 	free(copy);
 }

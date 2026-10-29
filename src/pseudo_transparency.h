@@ -48,4 +48,13 @@ void wm_pseudo_update(struct wm_view *view);
 /* The same for every window: the desktop or the setting changed */
 void wm_pseudo_update_all(struct wm_server *server);
 
+/*
+ * Before each frame: windows that have moved or changed size since their
+ * copy of the desktop was made get a new one.  This is what follows a window
+ * dragged by hand (the pointer code moves it without going through
+ * wm_view_move()), animated, tiled or moved by any other path; a window that
+ * has not moved costs a comparison.
+ */
+void wm_pseudo_sync(struct wm_server *server);
+
 #endif /* WM_PSEUDO_TRANSPARENCY_H */

@@ -521,6 +521,12 @@ wm_drm_lease_offer_output(struct wm_server *s, struct wlr_output *o)
 { (void)s; (void)o; }
 
 void
+wm_pseudo_sync(struct wm_server *s)
+{
+	(void)s;
+}
+
+void
 wm_xwayland_sync_positions(struct wm_server *s)
 { (void)s; }
 

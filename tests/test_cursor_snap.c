@@ -794,6 +794,8 @@ struct wm_view {
 	bool ignore_size_hints;
 	int pseudo_rule;
 	struct wlr_scene_tree *pseudo_tree;
+	struct wlr_box pseudo_box;
+	unsigned pseudo_generation;
 	struct wlr_foreign_toplevel_handle_v1 *foreign_toplevel_handle;
 	struct wl_listener foreign_toplevel_request_activate;
 	struct wl_listener foreign_toplevel_request_maximize;

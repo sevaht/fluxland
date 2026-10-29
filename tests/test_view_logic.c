@@ -742,6 +742,8 @@ struct wm_view {
 	bool ignore_size_hints;
 	int pseudo_rule;
 	struct wlr_scene_tree *pseudo_tree;
+	struct wlr_box pseudo_box;
+	unsigned pseudo_generation;
 	bool docked;
 	bool focus_hidden;
 	bool icon_hidden;

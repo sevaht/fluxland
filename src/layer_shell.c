@@ -307,8 +307,22 @@ handle_layer_surface_commit(struct wl_listener *listener, void *data)
 				layer_surface->current.layer));
 	}
 
-	/* Re-arrange layers when state changes */
-	if (layer_surface->output) {
+	/*
+	 * Re-arrange layers when what decides the layout changes (size,
+	 * anchor, exclusive zone, margin, layer).  Not for every commit: an
+	 * arrangement configures the surface, and a client that draws again
+	 * on each configure (swaybg does) would commit, be configured, and
+	 * commit, without end.
+	 */
+	const uint32_t layout_fields =
+		WLR_LAYER_SURFACE_V1_STATE_DESIRED_SIZE |
+		WLR_LAYER_SURFACE_V1_STATE_ANCHOR |
+		WLR_LAYER_SURFACE_V1_STATE_EXCLUSIVE_ZONE |
+		WLR_LAYER_SURFACE_V1_STATE_MARGIN |
+		WLR_LAYER_SURFACE_V1_STATE_LAYER |
+		WLR_LAYER_SURFACE_V1_STATE_EXCLUSIVE_EDGE;
+	if (layer_surface->output &&
+	    (layer_surface->current.committed & layout_fields)) {
 		struct wm_output *output = output_from_wlr(
 			ls->server, layer_surface->output);
 		if (output) {

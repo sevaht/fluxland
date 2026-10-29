@@ -977,6 +977,8 @@ struct wm_view {
 	bool ignore_size_hints;
 	int pseudo_rule;
 	struct wlr_scene_tree *pseudo_tree;
+	struct wlr_box pseudo_box;
+	unsigned pseudo_generation;
 	void *foreign_toplevel_handle;
 	struct wm_decoration *decoration;
 	struct wl_listener request_maximize;
