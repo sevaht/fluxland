@@ -557,6 +557,9 @@ static struct wm_view *g_event_view;
 static int g_rebase_count;
 static void wm_cursor_rebase(struct wm_server *s) { (void)s; g_rebase_count++; }
 static void wm_pseudo_update(struct wm_view *v) { (void)v; }
+static int g_xwayland_raised_count;
+static void wm_xwayland_view_raised(struct wm_view *v)
+{ (void)v; g_xwayland_raised_count++; }
 
 static void
 wm_cursor_run_event(struct wm_server *s, uint32_t ctx, int event,

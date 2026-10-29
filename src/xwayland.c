@@ -47,10 +47,12 @@
 #include "toolbar.h"
 #include "view.h"
 #include "workspace.h"
+#include "xwayland_shape.h"
 
 /* A managed X11 window: a wm_view with an XWayland backend */
 struct wm_xwayland_view {
 	struct wm_view view;
+	struct wm_xshape *shape;	/* its X Shape, which clips the surface */
 	struct wlr_scene_tree *surface_tree; /* while associated */
 
 	struct wl_listener destroy;
@@ -78,7 +80,8 @@ struct wm_xwayland_view {
 struct wm_xwayland_unmanaged {
 	struct wm_server *server;
 	struct wlr_xwayland_surface *xsurface;
-	struct wlr_scene_tree *scene_tree; /* while mapped */
+	struct wm_xshape *shape;	/* its X Shape, which clips the surface */
+	/* what it is drawn in while mapped: wm_xshape_tree(shape) */
 
 	struct wl_listener destroy;
 	struct wl_listener associate;
@@ -140,6 +143,10 @@ resolve_atoms(xcb_connection_t *conn, struct wm_xwayland_atoms *atoms)
 		resolve_atom(conn, "_NET_WM_WINDOW_TYPE_TOOLTIP");
 	atoms->net_wm_window_type_notification =
 		resolve_atom(conn, "_NET_WM_WINDOW_TYPE_NOTIFICATION");
+	atoms->net_wm_window_type_combo =
+		resolve_atom(conn, "_NET_WM_WINDOW_TYPE_COMBO");
+	atoms->net_wm_window_type_dnd =
+		resolve_atom(conn, "_NET_WM_WINDOW_TYPE_DND");
 	atoms->motif_wm_hints = resolve_atom(conn, "_MOTIF_WM_HINTS");
 	atoms->net_wm_window_type_dock =
 		resolve_atom(conn, "_NET_WM_WINDOW_TYPE_DOCK");
@@ -591,8 +598,7 @@ handle_map(struct wl_listener *listener, void *data)
 	}
 
 	/* The client area goes inside the decoration frame */
-	xview->surface_tree = wlr_scene_subsurface_tree_create(
-		view->scene_tree, xs->surface);
+	xview->surface_tree = wm_xshape_show(xview->shape, view->scene_tree);
 	if (!xview->surface_tree) {
 		wlr_log(WLR_ERROR, "%s",
 			"xwayland: failed to create surface tree");
@@ -651,7 +657,7 @@ handle_unmap(struct wl_listener *listener, void *data)
 	}
 	if (view->tab_group)
 		wm_tab_group_remove(view);
-	wlr_scene_node_destroy(&xview->surface_tree->node);
+	wm_xshape_hide(xview->shape);
 	xview->surface_tree = NULL;
 }
 
@@ -721,6 +727,7 @@ destroy_managed(struct wm_xwayland_view *xview)
 	wl_list_remove(&xview->set_override_redirect.link);
 
 	view->xsurface->data = NULL;
+	wm_xshape_destroy(xview->shape);
 	wm_view_destroy_common(view);
 	free(xview);
 }
@@ -1030,6 +1037,7 @@ create_managed(struct wm_server *server,
 		return;
 	}
 	xsurface->data = xview;
+	xview->shape = wm_xshape_create(server, xsurface);
 
 	xview->destroy.notify = handle_destroy;
 	wl_signal_add(&xsurface->events.destroy, &xview->destroy);
@@ -1081,12 +1089,91 @@ create_managed(struct wm_server *server,
 /*  Override-redirect windows                                          */
 /* ------------------------------------------------------------------ */
 
+/*
+ * A short-lived piece of an application's interface that belongs above
+ * whatever is raised (a menu, a tooltip, a drag icon): these stay on top.
+ */
+static bool
+is_popup_window(struct wlr_xwayland_surface *xs,
+	const struct wm_xwayland_atoms *atoms)
+{
+	const xcb_atom_t popups[] = {
+		atoms->net_wm_window_type_menu,
+		atoms->net_wm_window_type_dropdown_menu,
+		atoms->net_wm_window_type_popup_menu,
+		atoms->net_wm_window_type_tooltip,
+		atoms->net_wm_window_type_notification,
+		atoms->net_wm_window_type_combo,
+		atoms->net_wm_window_type_dnd,
+	};
+	for (size_t i = 0; i < sizeof(popups) / sizeof(popups[0]); i++)
+		if (popups[i] != XCB_ATOM_NONE && has_window_type(xs, popups[i]))
+			return true;
+	return false;
+}
+
+/* Windows of one application: the same WM_CLASS, as Fluxbox groups by */
+static bool
+same_application(const struct wlr_xwayland_surface *a,
+	const struct wlr_xwayland_surface *b)
+{
+	return a->class && *a->class && b->class && !strcmp(a->class, b->class) &&
+		((!a->instance && !b->instance) ||
+		 (a->instance && b->instance && !strcmp(a->instance, b->instance)));
+}
+
+/*
+ * An override-redirect window is an ordinary one in X's stacking order: it
+ * is on top when it appears, and a window the window manager raises after
+ * that goes over it.  So a view that is raised goes over the override-
+ * redirect windows that are above everything, and sits where it was: Wine
+ * and Proton draw their focus overlays as such windows, and a terminal
+ * clicked afterwards must cover them.
+ *
+ * Except that a window of the same application is the one an overlay is
+ * for (it shares its WM_CLASS, if not its process): that stays over it,
+ * as the application itself raises it over the window again on X.  And a
+ * popup (menu, tooltip) is above whatever is raised.
+ */
+void
+wm_xwayland_view_raised(struct wm_view *view)
+{
+	struct wm_server *server = view->server;
+	if (!view->scene_tree || !view->scene_tree->node.parent)
+		return;
+	/* A window raised where nothing can see it (another workspace) is no
+	 * stacking against what is on screen */
+	int lx, ly;
+	if (!wlr_scene_node_coords(&view->scene_tree->node, &lx, &ly))
+		return;
+	struct wlr_scene_tree *parent = view->scene_tree->node.parent;
+	struct wm_xwayland_unmanaged *u;
+	wl_list_for_each(u, &server->xwayland_unmanaged, link) {
+		struct wlr_scene_tree *tree = wm_xshape_tree(u->shape);
+		if (!tree || is_popup_window(u->xsurface, &server->xwayland_atoms))
+			continue;
+		bool same_app = view->type == WM_VIEW_XWAYLAND &&
+			view->xsurface &&
+			same_application(u->xsurface, view->xsurface);
+		if (same_app) {
+			wlr_scene_node_reparent(&tree->node, parent);
+			wlr_scene_node_place_above(&tree->node,
+				&view->scene_tree->node);
+		} else if (tree->node.parent == server->xwayland_override_tree) {
+			wlr_scene_node_reparent(&tree->node, parent);
+			wlr_scene_node_place_below(&tree->node,
+				&view->scene_tree->node);
+		}
+	}
+}
+
 static void
 unmanaged_set_position(struct wm_xwayland_unmanaged *u)
 {
-	if (u->scene_tree)
-		wlr_scene_node_set_position(&u->scene_tree->node,
-			u->xsurface->x, u->xsurface->y);
+	struct wlr_scene_tree *tree = wm_xshape_tree(u->shape);
+	if (tree)
+		wlr_scene_node_set_position(&tree->node, u->xsurface->x,
+			u->xsurface->y);
 }
 
 static void
@@ -1097,13 +1184,12 @@ handle_unmanaged_map(struct wl_listener *listener, void *data)
 	struct wlr_xwayland_surface *xs = u->xsurface;
 
 	/*
-	 * Above everything but the session lock, as on X (where nothing
-	 * stacks over an override-redirect window): so a screen locker's
-	 * window covers the toolbar too, and a menu is not cut by it
+	 * Above everything but the session lock when it appears, as on X:
+	 * so a screen locker's window covers the toolbar too, and a menu is
+	 * not cut by it.  Windows raised after it go over it
+	 * (wm_xwayland_view_raised())
 	 */
-	u->scene_tree = wlr_scene_subsurface_tree_create(
-		server->xwayland_override_tree, xs->surface);
-	if (!u->scene_tree)
+	if (!wm_xshape_show(u->shape, server->xwayland_override_tree))
 		return;
 	unmanaged_set_position(u);
 
@@ -1123,10 +1209,7 @@ handle_unmanaged_unmap(struct wl_listener *listener, void *data)
 		wl_container_of(listener, u, unmap);
 	struct wm_server *server = u->server;
 
-	if (u->scene_tree) {
-		wlr_scene_node_destroy(&u->scene_tree->node);
-		u->scene_tree = NULL;
-	}
+	wm_xshape_hide(u->shape);
 
 	/* Give the keyboard back to the focused window */
 	if (server->seat->keyboard_state.focused_surface ==
@@ -1194,8 +1277,7 @@ destroy_unmanaged(struct wm_xwayland_unmanaged *u)
 		wl_list_remove(&u->map.link);
 		wl_list_remove(&u->unmap.link);
 	}
-	if (u->scene_tree)
-		wlr_scene_node_destroy(&u->scene_tree->node);
+	wm_xshape_destroy(u->shape);
 	wl_list_remove(&u->destroy.link);
 	wl_list_remove(&u->associate.link);
 	wl_list_remove(&u->dissociate.link);
@@ -1249,6 +1331,7 @@ create_unmanaged(struct wm_server *server,
 	u->server = server;
 	u->xsurface = xsurface;
 	xsurface->data = u;
+	u->shape = wm_xshape_create(server, xsurface);
 
 	u->destroy.notify = handle_unmanaged_destroy;
 	wl_signal_add(&xsurface->events.destroy, &u->destroy);
@@ -1360,6 +1443,7 @@ handle_xwayland_ready(struct wl_listener *listener, void *data)
 		resolve_atoms(conn, &server->xwayland_atoms);
 		wlr_log(WLR_INFO, "%s", "xwayland: atoms resolved");
 	}
+	wm_xshape_init(server);
 
 	/* What xrdb does in an X session: for the programs started now */
 	wm_xwayland_apply_resources(server);
@@ -1437,6 +1521,7 @@ void
 wm_xwayland_finish(struct wm_server *server)
 {
 	if (server->xwayland) {
+		wm_xshape_finish(server);
 		wl_list_remove(&server->xwayland_new_surface.link);
 		wl_list_remove(&server->xwayland_ready.link);
 		wlr_xwayland_destroy(server->xwayland);
@@ -1445,6 +1530,12 @@ wm_xwayland_finish(struct wm_server *server)
 }
 
 #else /* !WM_HAS_XWAYLAND */
+
+void
+wm_xwayland_view_raised(struct wm_view *view)
+{
+	(void)view;
+}
 
 void
 wm_xwayland_init(struct wm_server *server)

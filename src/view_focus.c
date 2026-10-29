@@ -37,6 +37,7 @@
 #include "mousebind.h"
 #include "view.h"
 #include "view_focus.h"
+#include "xwayland.h"
 #include "workspace.h"
 
 /* --- Focus Management --- */
@@ -118,6 +119,7 @@ focus_view(struct wm_view *view, struct wlr_surface *surface, bool raise)
 
 		/* Raise in the scene graph */
 		wlr_scene_node_raise_to_top(&view->scene_tree->node);
+		wm_xwayland_view_raised(view);
 	}
 
 	/* Focus order stays frozen while NextWindow cycling is active */
@@ -340,6 +342,7 @@ wm_view_raise(struct wm_view *view)
 	wl_list_remove(&view->link);
 	wl_list_insert(&view->server->views, &view->link);
 	wlr_scene_node_raise_to_top(&view->scene_tree->node);
+	wm_xwayland_view_raised(view);
 	wm_cursor_rebase(view->server);
 }
 
@@ -397,6 +400,7 @@ wm_view_set_layer(struct wm_view *view, enum wm_view_layer layer)
 
 	wlr_scene_node_reparent(&view->scene_tree->node, target);
 	wlr_scene_node_raise_to_top(&view->scene_tree->node);
+	wm_xwayland_view_raised(view);
 }
 
 void

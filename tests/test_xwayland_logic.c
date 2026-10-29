@@ -567,6 +567,31 @@ wlr_scene_subsurface_tree_create(struct wlr_scene_tree *parent,
 }
 
 static void
+wlr_scene_node_reparent(struct wlr_scene_node *node,
+	struct wlr_scene_tree *parent)
+{
+	node->parent = parent;
+}
+
+static int g_place_above, g_place_below;
+
+static void
+wlr_scene_node_place_above(struct wlr_scene_node *node,
+	struct wlr_scene_node *sibling)
+{
+	(void)node; (void)sibling;
+	g_place_above++;
+}
+
+static void
+wlr_scene_node_place_below(struct wlr_scene_node *node,
+	struct wlr_scene_node *sibling)
+{
+	(void)node; (void)sibling;
+	g_place_below++;
+}
+
+static void
 wlr_scene_node_destroy(struct wlr_scene_node *node)
 {
 	(void)node;
@@ -709,6 +734,8 @@ struct wm_xwayland_atoms {
 	xcb_atom_t net_wm_window_type_popup_menu;
 	xcb_atom_t net_wm_window_type_tooltip;
 	xcb_atom_t net_wm_window_type_notification;
+	xcb_atom_t net_wm_window_type_combo;
+	xcb_atom_t net_wm_window_type_dnd;
 	xcb_atom_t net_wm_window_type_dock;
 	xcb_atom_t net_wm_window_type_desktop;
 	xcb_atom_t motif_wm_hints;
@@ -982,6 +1009,27 @@ int setenv(const char *name, const char *value, int overwrite);
 /* cursor.c */
 static void wm_cursor_rebase(struct wm_server *s) { (void)s; }
 static void wm_pseudo_update(struct wm_view *v) { (void)v; }
+
+/* xwayland_shape.c has its own tests; the surfaces here are unshaped: its
+ * stand-in only keeps the tree a window is shown in */
+struct wm_xshape { struct wlr_scene_tree *tree; };
+static struct wm_xshape *wm_xshape_create(struct wm_server *s,
+	struct wlr_xwayland_surface *x)
+{ (void)s; (void)x; return calloc(1, sizeof(struct wm_xshape)); }
+static void wm_xshape_destroy(struct wm_xshape *x) { free(x); }
+static struct wlr_scene_tree *wm_xshape_show(struct wm_xshape *x,
+	struct wlr_scene_tree *parent)
+{ x->tree = wlr_scene_subsurface_tree_create(parent, NULL); return x->tree; }
+static void wm_xshape_hide(struct wm_xshape *x)
+{
+	if (x->tree)
+		g_tree_destroy_count++;
+	x->tree = NULL;
+}
+static struct wlr_scene_tree *wm_xshape_tree(const struct wm_xshape *x)
+{ return x ? x->tree : NULL; }
+static void wm_xshape_init(struct wm_server *s) { (void)s; }
+static void wm_xshape_finish(struct wm_server *s) { (void)s; }
 
 /* rules.c: an apps entry holding a new window's geometry */
 static bool g_hold_pos, g_hold_size;
@@ -1871,19 +1919,19 @@ test_unmanaged(void)
 	struct wm_xwayland_unmanaged *u = menu.xs.data;
 
 	fake_map(&menu);
-	assert(u->scene_tree);
+	assert(wm_xshape_tree(u->shape));
 	/* Not with the xdg popups, which the toolbar covers */
-	assert(u->scene_tree->node.parent == &override_tree);
-	assert(u->scene_tree->node.x == 120 && u->scene_tree->node.y == 80);
+	assert(wm_xshape_tree(u->shape)->node.parent == &override_tree);
+	assert(wm_xshape_tree(u->shape)->node.x == 120 && wm_xshape_tree(u->shape)->node.y == 80);
 	assert(g_kb_enter_surface == &menu.surface);
 	assert(g_map_common_count == 0);
 
 	menu.xs.x = 130;
 	wl_signal_emit(&menu.xs.events.set_geometry, NULL);
-	assert(u->scene_tree->node.x == 130);
+	assert(wm_xshape_tree(u->shape)->node.x == 130);
 
 	emit_configure(&menu, 140, 90, 50, 60, 0);
-	assert(u->scene_tree->node.x == 140 && u->scene_tree->node.y == 90);
+	assert(wm_xshape_tree(u->shape)->node.x == 140 && wm_xshape_tree(u->shape)->node.y == 90);
 	assert(g_cfg_w == 50 && g_cfg_h == 60);
 
 	/* Unmap returns the keyboard to the focused window */
@@ -1894,7 +1942,7 @@ test_unmanaged(void)
 	server.focused_view = view_of(&win);
 	seat.keyboard_state.focused_surface = &menu.surface;
 	fake_unmap(&menu);
-	assert(u->scene_tree == NULL);
+	assert(wm_xshape_tree(u->shape) == NULL);
 	assert(g_kb_enter_surface == &win.surface);
 
 	fake_destroy(&menu);
@@ -1902,6 +1950,76 @@ test_unmanaged(void)
 	fake_unmap(&win);
 	fake_destroy(&win);
 	printf("  PASS: unmanaged\n");
+}
+
+/* Windows raised after an override-redirect one go over it, except one of
+ * its own application; a popup stays on top */
+static void
+test_raise_stacks_override_redirect_windows(void)
+{
+	reset();
+	struct fake_x11 member, same, stranger, tip;
+	fake_init(&member, false);
+	member.xs.class = (char *)"grp";
+	member.xs.instance = (char *)"grp";
+	fake_create(&member);
+	fake_map(&member);
+	struct wm_view *view = view_of(&member);
+	/* in a workspace's tree, as views are */
+	static struct wlr_scene_tree workspace_tree;
+	workspace_tree.node.enabled = true;
+	view->scene_tree->node.parent = &workspace_tree;
+
+	fake_init(&same, true);
+	same.xs.class = (char *)"grp";
+	same.xs.instance = (char *)"grp";
+	fake_init(&stranger, true);
+	stranger.xs.class = (char *)"other";
+	stranger.xs.instance = (char *)"other";
+	fake_init(&tip, true);
+	fake_set_type(&tip, ATOM_TOOLTIP);
+	struct fake_x11 *all[3] = { &same, &stranger, &tip };
+	for (int i = 0; i < 3; i++) {
+		fake_create(all[i]);
+		fake_map(all[i]);
+	}
+	struct wm_xwayland_unmanaged *u_same = same.xs.data;
+	struct wm_xwayland_unmanaged *u_stranger = stranger.xs.data;
+	struct wm_xwayland_unmanaged *u_tip = tip.xs.data;
+	/* all on top to begin with */
+	assert(wm_xshape_tree(u_same->shape)->node.parent == &override_tree);
+	assert(wm_xshape_tree(u_stranger->shape)->node.parent == &override_tree);
+
+	/* raised where nothing is shown (another workspace): no stacking */
+	g_place_above = g_place_below = 0;
+	workspace_tree.node.enabled = false;
+	wm_xwayland_view_raised(view);
+	assert(g_place_above == 0 && g_place_below == 0);
+	assert(wm_xshape_tree(u_same->shape)->node.parent == &override_tree);
+	workspace_tree.node.enabled = true;
+
+	g_place_above = g_place_below = 0;
+	wm_xwayland_view_raised(view);
+	struct wlr_scene_tree *home = view->scene_tree->node.parent;
+	/* its own application's goes just over it, a stranger's under it */
+	assert(wm_xshape_tree(u_same->shape)->node.parent == home);
+	assert(wm_xshape_tree(u_stranger->shape)->node.parent == home);
+	assert(g_place_above == 1 && g_place_below == 1);
+	/* the popup stays where it is */
+	assert(wm_xshape_tree(u_tip->shape)->node.parent == &override_tree);
+
+	/* the stranger is no longer above everything: raising again leaves it
+	 * where it is; the member's own goes over it again */
+	wm_xwayland_view_raised(view);
+	assert(g_place_above == 2 && g_place_below == 1);
+
+	for (int i = 0; i < 3; i++) {
+		fake_unmap(all[i]);
+		fake_destroy(all[i]);
+	}
+	fake_unmap(&member);
+	fake_destroy(&member);
+	printf("  PASS: raise_stacks_override_redirect_windows\n");
 }
 
 static void
@@ -1920,7 +2038,7 @@ test_override_redirect_changes(void)
 	assert(wl_list_length(&server.views) == 0);
 	assert(wl_list_length(&server.xwayland_unmanaged) == 1);
 	struct wm_xwayland_unmanaged *u = f.xs.data;
-	assert(u && u->scene_tree);
+	assert(u && wm_xshape_tree(u->shape));
 
 	/* And back */
 	f.xs.override_redirect = false;
@@ -2053,6 +2171,7 @@ main(void)
 	test_backend_ops();
 	test_sync_positions();
 	test_unmanaged();
+	test_raise_stacks_override_redirect_windows();
 	test_override_redirect_changes();
 
 	printf("All xwayland_logic tests passed.\n");

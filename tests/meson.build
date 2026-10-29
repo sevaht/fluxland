@@ -320,6 +320,19 @@ test_pseudo_transparency = executable(
 )
 test('pseudo_transparency', test_pseudo_transparency)
 
+# --- test_xwayland_shape: what an X Shape leaves of a window ---
+if have_xwayland
+  test_xwayland_shape = executable(
+    'test_xwayland_shape',
+    files('test_xwayland_shape.c', '../src/xwayland_shape.c'),
+    include_directories: test_inc,
+    dependencies: [wayland_server, wlroots, server_protos, pangocairo, math,
+      xcb, xcb_shape],
+    install: false,
+  )
+  test('xwayland_shape', test_xwayland_shape)
+endif
+
 # --- test_cursor_snap: cursor snap zone detection and geometry tests ---
 # cursor.c is #included directly in the test to allow stubbing wlroots/cairo deps.
 test_cursor_snap = executable(
@@ -708,6 +721,16 @@ if wayland_client.found()
     dependencies: [wayland_client],
     install: false,
   )
+
+  # --- fluxland-test-xshape: an X11 window with a Shape (Wine's focus
+  # overlays are rings), for the UI tests of XWayland shapes and stacking ---
+  if have_xwayland
+    executable('fluxland-test-xshape',
+      files('ui/tools/xshape_client.c'),
+      dependencies: [xcb, xcb_shape],
+      install: false,
+    )
+  endif
 endif
 
 # --- Visual regression tests (decoration rendering) ---

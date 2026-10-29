@@ -346,3 +346,9 @@ Fluxbox's own styles. See [STYLES.md](STYLES.md).
   translucent window show the wallpaper behind it rather than the windows
   below it, as Fluxbox's root-pixmap pseudo-transparency does on X11.  Off
   unless asked for.
+- **X11 windows with a Shape, and override-redirect stacking.**  XWayland cannot
+  show a window's X Shape (Wine's layered windows, Proton's focus overlays, are
+  rings), so fluxland clips the window to the shape itself, and follows the shape
+  as it changes.  An override-redirect window is on top when it appears, and a
+  window raised afterwards covers it, as on X (a window of its own application
+  and popup menus stay over it).

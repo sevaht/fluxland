@@ -158,6 +158,7 @@ if have_xwayland
   xcb = dependency('xcb')
   xcb_ewmh = dependency('xcb-ewmh')
   xcb_icccm = dependency('xcb-icccm')
+  xcb_shape = dependency('xcb-shape')
   add_project_arguments('-DWM_HAS_XWAYLAND', language: 'c')
 endif
 
@@ -331,12 +332,13 @@ wm_sources = files(
   'src/validate.c',
   'src/wallpaper.c',
   'src/xwayland.c',
+  'src/xwayland_shape.c',
   'src/xwayland_grab.c',
   'src/eis.c',
 )
 
 if have_xwayland
-  wm_deps += [xcb, xcb_ewmh, xcb_icccm]
+  wm_deps += [xcb, xcb_ewmh, xcb_icccm, xcb_shape]
 endif
 
 if have_eis
