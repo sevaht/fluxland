@@ -193,6 +193,33 @@ handle_xdg_activation_request(struct wl_listener *listener, void *data)
 		view->title ? view->title : "(untitled)");
 }
 
+const char *
+wm_activation_token_create(struct wm_server *server)
+{
+	if (!server->xdg_activation || !server->seat)
+		return NULL;
+	struct wlr_xdg_activation_token_v1 *token =
+		wlr_xdg_activation_token_v1_create(server->xdg_activation);
+	if (!token)
+		return NULL;
+	token->seat = server->seat;
+	return wlr_xdg_activation_token_v1_get_name(token);
+}
+
+bool
+wm_activation_token_consume(struct wm_server *server, const char *name)
+{
+	if (!name || !*name || !server->xdg_activation)
+		return false;
+	struct wlr_xdg_activation_token_v1 *token =
+		wlr_xdg_activation_v1_find_token(server->xdg_activation, name);
+	if (!token)
+		return false;
+	bool user = token->seat != NULL;
+	wlr_xdg_activation_token_v1_destroy(token);
+	return user;
+}
+
 /* --- System bell (xdg-system-bell-v1) --- */
 
 static void

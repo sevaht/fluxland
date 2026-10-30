@@ -17,6 +17,7 @@
 
 #include <cairo.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <systemd/sd-bus.h>
 #include <wayland-server-core.h>
 #include <wlr/types/wlr_scene.h>
@@ -47,6 +48,28 @@ struct wm_systray_item {
 	struct wm_systray *systray;
 	struct wl_list link;   /* wm_systray.items */
 };
+
+/*
+ * Give an item an xdg-activation token of the user's click, before the call
+ * it is for (see systray.c).  Does nothing if there is no seat.
+ */
+void wm_systray_provide_token(struct wm_systray *systray,
+	const char *bus_name, const char *object_path);
+
+/*
+ * systray.activationGrace: a click is being passed on to the program at
+ * bus_name.  Returns the grant's id (0: none: off, or its pid unknown), to
+ * give as the user data of wm_systray_grant_reply, the reply handler of the
+ * call that passes the click on.
+ */
+uint64_t wm_systray_grant_begin(struct wm_systray *systray,
+	const char *bus_name);
+int wm_systray_grant_reply(sd_bus_message *reply, void *userdata,
+	sd_bus_error *ret_error);
+
+/* ... for the item whose menu (its dbusmenu path) an entry was chosen in */
+void wm_systray_provide_menu_token(struct wm_systray *systray,
+	const char *bus_name, const char *menu_path);
 
 /* System tray manager */
 struct wm_systray {

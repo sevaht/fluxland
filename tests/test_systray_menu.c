@@ -166,6 +166,20 @@ void wm_systray_menu_open(struct wm_systray *systray, const char *bus_name,
 	int x, int y);
 void wm_systray_menu_activate(struct wm_server *server, const char *spec);
 void wm_systray_menu_cancel_all(struct wm_systray *systray);
+uint64_t wm_systray_grant_begin(struct wm_systray *systray,
+	const char *bus_name);
+int wm_systray_grant_reply(sd_bus_message *reply, void *userdata,
+	sd_bus_error *ret_error);
+uint64_t wm_systray_grant_begin(struct wm_systray *systray,
+	const char *bus_name)
+{ (void)systray; (void)bus_name; return 0; }
+int wm_systray_grant_reply(sd_bus_message *reply, void *userdata,
+	sd_bus_error *ret_error)
+{ (void)reply; (void)userdata; (void)ret_error; return 0; }
+static int g_menu_tokens;
+void wm_systray_provide_menu_token(struct wm_systray *systray,
+	const char *bus_name, const char *menu_path)
+{ (void)systray; (void)bus_name; (void)menu_path; g_menu_tokens++; }
 static int g_bus_kicks;
 void wm_systray_bus_kick(struct wm_systray *systray)
 { (void)systray; g_bus_kicks++; }
@@ -351,8 +365,11 @@ test_activate_sends_event(void)
 	struct wm_server server = { .systray = &systray };
 
 	g_event_calls = 0;
+	g_menu_tokens = 0;
 	wm_systray_menu_activate(&server, ":1.77 /com/canonical/dbusmenu 42");
 	assert(g_event_calls == 1);
+	/* the item is given the user's token for the entry chosen */
+	assert(g_menu_tokens == 1);
 	assert(strcmp(g_event_dest, ":1.77") == 0);
 	assert(strcmp(g_event_path, "/com/canonical/dbusmenu") == 0);
 	assert(strcmp(g_event_member, "Event") == 0);
@@ -365,6 +382,7 @@ test_activate_sends_event(void)
 	wm_systray_menu_activate(&server, NULL);
 	wm_systray_menu_activate(NULL, ":1.77 /path 1");
 	assert(g_event_calls == 1);
+	assert(g_menu_tokens == 1);
 
 	/* No tray, no click */
 	struct wm_server no_tray = { 0 };

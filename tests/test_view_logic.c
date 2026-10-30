@@ -8,6 +8,7 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include <assert.h>
+#include "../src/tray_grant.h"
 #include <stdbool.h>
 #include <stdint.h>
 #include <sys/types.h>
@@ -1473,6 +1474,7 @@ void wm_view_unminimize(struct wm_view *view);
 void wm_view_set_urgent(struct wm_view *view, bool urgent);
 void wm_view_present(struct wm_view *view);
 bool wm_view_request_activate(struct wm_view *view, bool allowed);
+pid_t wm_view_pid(struct wm_view *view);
 #define WM_ICON_SIZE 32
 void wm_view_set_icon(struct wm_view *view, struct _cairo_surface *icon,
 	bool from_client);
@@ -5687,6 +5689,38 @@ test_activate_refused_marks_urgent(void)
 	assert(test_views[0].urgent);
 	assert(test_server.focused_view == &test_views[1]);
 	test_views[1].focus_protection = 0;
+
+	/* [FocusProtection] Gain: it may ask for the focus... */
+	test_server.focused_view = &test_views[1];
+	test_views[0].focus_protection = WM_FOCUS_PROT_GAIN;
+	assert(wm_view_request_activate(&test_views[0], false));
+	assert(test_server.focused_view == &test_views[0]);
+	/* ...but not from a focused Lock window */
+	test_server.focused_view = &test_views[1];
+	test_views[1].focus_protection = WM_FOCUS_PROT_LOCK;
+	assert(!wm_view_request_activate(&test_views[0], false));
+	test_views[0].focus_protection = 0;
+	test_views[1].focus_protection = 0;
+	test_views[0].urgent = false;
+
+	/* A click in the tray menu of its program (systray.activationGrace):
+	 * allowed while the grant lasts, not before or after (a client, so
+	 * that the window has a pid: 4242, as the stub gives) */
+	static char client_resource;
+	test_xdg_surfaces[0].resource = (struct wl_resource *)&client_resource;
+	test_server.focused_view = &test_views[1];
+	assert(!wm_view_request_activate(&test_views[0], false));
+	test_views[0].urgent = false;
+	uint64_t grant = wm_tray_grant_begin(4242, wm_tray_grant_now_ms(),
+		60000);
+	assert(grant != 0);
+	assert(wm_view_request_activate(&test_views[0], false));
+	assert(test_server.focused_view == &test_views[0]);
+	wm_tray_grant_clear();
+	test_server.focused_view = &test_views[1];
+	assert(!wm_view_request_activate(&test_views[0], false));
+	test_views[0].urgent = false;
+	test_server.focused_view = &test_views[0];
 
 	/* Unmapped or no-focus windows are ignored entirely */
 	test_views[0].urgent = false;

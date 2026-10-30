@@ -446,6 +446,7 @@ static const struct init_key_spec init_keys[] = {
 	{"session.screen0.toolbar.button.*", VT_STRING, 0, 0, NULL},
 	{"session.screen0.systray.pinLeft", VT_STRING, 0, 0, NULL},
 	{"session.screen0.systray.pinRight", VT_STRING, 0, 0, NULL},
+	{"session.screen0.systray.activationGrace", VT_INT, 0, 10000, NULL},
 	{"session.xwayland.inputEmulation", VT_ENUM, 0, 0, valid_eis_policies},
 	{"session.xwayland.inputEmulation.allow", VT_STRING, 0, 0, NULL},
 	{"session.xwayland.inputEmulation.deny", VT_STRING, 0, 0, NULL},

@@ -494,8 +494,14 @@ wm_systray_menu_activate(struct wm_server *server, const char *spec)
 	clock_gettime(CLOCK_MONOTONIC, &ts);
 	uint32_t time_ms = (uint32_t)(ts.tv_sec * 1000 + ts.tv_nsec / 1000000);
 
+	/* The entry is the user's doing: its item may focus its window for it */
+	wm_systray_provide_menu_token(server->systray, bus_name, path);
+
+	uint64_t grant = wm_systray_grant_begin(server->systray, bus_name);
 	sd_bus_call_method_async(server->systray->bus, NULL, bus_name, path,
-		DBUSMENU_IFACE, "Event", NULL, NULL, "isvu",
+		DBUSMENU_IFACE, "Event",
+		grant ? wm_systray_grant_reply : NULL,
+		grant ? (void *)(uintptr_t)grant : NULL, "isvu",
 		(int32_t)id, "clicked", "i", (int32_t)0, time_ms);
 	wm_systray_bus_kick(server->systray);
 	wlr_log(WLR_DEBUG, "systray: clicked entry %d of %s", id, bus_name);

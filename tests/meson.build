@@ -54,6 +54,15 @@ test_run_dialog = executable(
 )
 test('run_dialog', test_run_dialog)
 
+# --- test_tray_grant: windows that may take the focus after a tray click ---
+test_tray_grant = executable(
+  'test_tray_grant',
+  files('test_tray_grant.c', '../src/tray_grant.c'),
+  include_directories: test_inc,
+  install: false,
+)
+test('tray_grant', test_tray_grant)
+
 # --- test_icon: iconbar icons (theme / desktop file lookup, client pixels) ---
 test_icon = executable(
   'test_icon',
@@ -172,7 +181,7 @@ test('workspace', test_workspace)
 # view.c is #included directly in the test to allow stubbing wlroots deps.
 test_view_logic = executable(
   'test_view_logic',
-  files('test_view_logic.c'),
+  files('test_view_logic.c', '../src/tray_grant.c'),
   include_directories: test_inc,
   dependencies: [wlroots, math, pangocairo],
   install: false,
@@ -414,7 +423,7 @@ test('server', test_server)
 if have_systray
   test_systray = executable(
     'test_systray',
-    files('test_systray.c'),
+    files('test_systray.c', '../src/tray_grant.c'),
     include_directories: test_inc,
     dependencies: [wlroots, pangocairo, libdrm, sdbus_dep],
     c_args: ['-Wno-unused-parameter'],
@@ -438,6 +447,9 @@ endif
 # Invokes the fluxland binary with various CLI flags and checks output/exit codes.
 test_main_env = environment()
 test_main_env.set('FLUXLAND_BIN', fluxland_exe.full_path())
+# Not the desktop's session bus: a compositor started by a test would take
+# the StatusNotifierWatcher name from the running one, and lose it for good
+test_main_env.set('DBUS_SESSION_BUS_ADDRESS', 'unix:path=/nonexistent/fluxland-test-bus')
 test_main = executable(
   'test_main',
   files('test_main.c'),

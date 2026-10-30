@@ -1875,6 +1875,35 @@ test_on_output(void)
 	printf("  PASS: test_on_output\n");
 }
 
+/* Test: systray.activationGrace: off by default, in ms, kept in range */
+static void
+test_systray_activation_grace(void)
+{
+	write_file(TEST_INIT, "\n");
+	struct wm_config *c = config_create();
+	config_load(c, TEST_INIT);
+	assert(c->systray_activation_grace_ms == 0);
+
+	write_file(TEST_INIT, "session.screen0.systray.activationGrace: 500\n");
+	config_load(c, TEST_INIT);
+	assert(c->systray_activation_grace_ms == 500);
+
+	write_file(TEST_INIT, "session.screen0.systray.activationGrace: -3\n");
+	config_load(c, TEST_INIT);
+	assert(c->systray_activation_grace_ms == 0);
+
+	write_file(TEST_INIT, "session.screen0.systray.activationGrace: 99999\n");
+	config_load(c, TEST_INIT);
+	assert(c->systray_activation_grace_ms == 10000);
+
+	/* reloaded without it: off again */
+	write_file(TEST_INIT, "\n");
+	config_load(c, TEST_INIT);
+	assert(c->systray_activation_grace_ms == 0);
+	config_destroy(c);
+	printf("  PASS: test_systray_activation_grace\n");
+}
+
 /* Test: the snap layout picker's keys, layouts, and their defaults */
 static void
 test_snap_layouts(void)
@@ -2050,6 +2079,7 @@ main(void)
 	test_xwayland_keyboard_grab();
 	test_snap_layouts();
 	test_on_output();
+	test_systray_activation_grace();
 	test_pseudo_transparency();
 	test_dpi();
 	test_placement_policies();

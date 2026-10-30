@@ -504,6 +504,10 @@ int sd_bus_process(sd_bus *bus, sd_bus_message **ret)
 static sd_bus_message_handler_t g_last_async_callback;
 static void *g_last_async_userdata;
 static char g_last_async_member[32];
+/* the order of the calls on the item: ProvideXdgActivationToken, Activate */
+static char g_async_members[8][40];
+static char g_async_token[8][16];
+static int g_async_members_count;
 
 int sd_bus_call_method_async(sd_bus *bus, sd_bus_slot **slot,
 	const char *destination, const char *path,
@@ -518,6 +522,20 @@ int sd_bus_call_method_async(sd_bus *bus, sd_bus_slot **slot,
 	g_last_async_userdata = userdata;
 	snprintf(g_last_async_member, sizeof(g_last_async_member), "%s",
 		member);
+	if (g_async_members_count < 8) {
+		snprintf(g_async_members[g_async_members_count],
+			sizeof(g_async_members[0]), "%s", member);
+		g_async_token[g_async_members_count][0] = '\0';
+		if (strcmp(member, "ProvideXdgActivationToken") == 0) {
+			va_list ap;
+			va_start(ap, types);
+			snprintf(g_async_token[g_async_members_count],
+				sizeof(g_async_token[0]), "%s",
+				va_arg(ap, const char *));
+			va_end(ap);
+		}
+		g_async_members_count++;
+	}
 	return 0;
 }
 
@@ -715,6 +733,15 @@ struct wm_server {
 	struct wlr_scene_tree *layer_top;
 };
 
+/* protocols.h: the user's xdg-activation token ("" for none, as without a seat) */
+static const char *g_token_name;
+const char *wm_activation_token_create(struct wm_server *server);
+const char *wm_activation_token_create(struct wm_server *server)
+{
+	(void)server;
+	return g_token_name;
+}
+
 /* --- Systray header contents (normally from systray.h) --- */
 
 #define WM_SYSTRAY_ICON_SIZE 18
@@ -823,6 +850,8 @@ reset_globals(void)
 	g_sdbus_open_user_ret = -1;
 	g_sdbus_emit_signal_count = 0;
 	g_sdbus_call_method_async_count = 0;
+	g_async_members_count = 0;
+	g_token_name = NULL;
 	g_sdbus_reply_method_return_count = 0;
 	g_sdbus_reply_method_errorf_count = 0;
 }
@@ -2576,6 +2605,82 @@ test_click_routing_with_menu(void)
 }
 
 /*
+ * Test: a click on an item gives it the user's xdg-activation token first,
+ * so what it does about the click (focusing its window) is the user's doing.
+ */
+static void
+test_click_provides_an_activation_token(void)
+{
+	reset_globals();
+	g_token_name = "tok-1";
+	struct wm_systray *systray = make_test_systray();
+	struct wm_systray_item *item = add_test_item(systray, ":1.f0", true);
+	wm_systray_layout(systray, 100, 50, 200, 24);
+
+	/* The left button: the token, then Activate */
+	assert(wm_systray_handle_click(systray, 10.0, 10.0, 0x110));
+	assert(g_async_members_count == 2);
+	assert(strcmp(g_async_members[0], "ProvideXdgActivationToken") == 0);
+	assert(strcmp(g_async_token[0], "tok-1") == 0);
+	assert(strcmp(g_async_members[1], "Activate") == 0);
+
+	/* The middle button and an item with a menu: the same */
+	g_async_members_count = 0;
+	assert(wm_systray_handle_click(systray, 10.0, 10.0, 0x112));
+	assert(strcmp(g_async_members[0], "ProvideXdgActivationToken") == 0);
+	assert(strcmp(g_async_members[1], "SecondaryActivate") == 0);
+	g_async_members_count = 0;
+	item->menu_path = strdup("/MenuBar");
+	assert(wm_systray_handle_click(systray, 10.0, 10.0, 0x110));
+	assert(strcmp(g_async_members[0], "ProvideXdgActivationToken") == 0);
+	assert(strcmp(g_async_members[1], "Activate") == 0);
+
+	/* The menu shown by the tray is no call on the item (its entries are) */
+	g_async_members_count = 0;
+	assert(wm_systray_handle_click(systray, 10.0, 10.0, 0x111));
+	assert(g_async_members_count == 0);
+
+	/* No token to give (no seat): only the call */
+	g_async_members_count = 0;
+	g_token_name = NULL;
+	item->menu_path = NULL;
+	assert(wm_systray_handle_click(systray, 10.0, 10.0, 0x110));
+	assert(g_async_members_count == 1);
+	assert(strcmp(g_async_members[0], "Activate") == 0);
+
+	destroy_test_systray(systray);
+	printf("  PASS: test_click_provides_an_activation_token\n");
+}
+
+/*
+ * Test: a menu entry's item gets the token, found by its menu.
+ */
+static void
+test_menu_token_goes_to_the_item_of_the_menu(void)
+{
+	reset_globals();
+	g_token_name = "tok-2";
+	struct wm_systray *systray = make_test_systray();
+	struct wm_systray_item *a = add_test_item(systray, ":1.f1", true);
+	struct wm_systray_item *b = add_test_item(systray, ":1.f2", true);
+	a->menu_path = strdup("/MenuA");
+	b->menu_path = strdup("/MenuB");
+
+	wm_systray_provide_menu_token(systray, ":1.f2", "/MenuB");
+	assert(g_async_members_count == 1);
+	assert(strcmp(g_async_members[0], "ProvideXdgActivationToken") == 0);
+
+	/* An unknown menu: nothing */
+	g_async_members_count = 0;
+	wm_systray_provide_menu_token(systray, ":1.f2", "/MenuA");
+	wm_systray_provide_menu_token(systray, ":1.zz", "/MenuB");
+	assert(g_async_members_count == 0);
+
+	destroy_test_systray(systray);
+	printf("  PASS: test_menu_token_goes_to_the_item_of_the_menu\n");
+}
+
+/*
  * Test: the Menu and ItemIsMenu properties; "/" means no menu.
  */
 static void
@@ -2645,6 +2750,8 @@ main(void)
 	test_tooltip_at();
 	test_pixmap_to_surface();
 	test_click_routing_with_menu();
+	test_click_provides_an_activation_token();
+	test_menu_token_goes_to_the_item_of_the_menu();
 	test_handle_get_menu();
 	test_register_item_bus_name();
 	test_register_item_object_path();

@@ -150,6 +150,25 @@ A configurable panel providing:
 - Customizable tool layout (left/center/right regions)
 - Auto-hide and placement options (top, bottom, per-monitor)
 
+#### System tray: focus on a click
+
+fluxland is the StatusNotifierWatcher and draws the items' menus itself, so an
+item's window is shown or raised by the item's own program, which a
+compositor does not let take the focus by itself. What the user did is
+passed on the way xdg-activation defines:
+
+1. At a click on an item, or on an entry of its menu, fluxland makes an
+   xdg-activation token bound to the seat (`wm_activation_token_create()`)
+   and gives it to the item with KDE's `ProvideXdgActivationToken(s)`
+   method, just before the `Activate`, `SecondaryActivate`, `ContextMenu` or
+   dbusmenu `Event` call (D-Bus delivers them in order).
+2. A Wayland client presents it with `xdg_activation_v1.activate`
+   (`protocols.c`: a token with a seat is the user's). An X11 client sets the
+   token as its window's `_NET_STARTUP_ID` and sends `_NET_ACTIVE_WINDOW`
+   (`xwayland.c`: `wm_activation_token_consume()`).
+3. Without a token, focus-stealing prevention applies as for any request; an
+   item that does not know the method is only marked as wanting attention.
+
 ### 9. Slit
 
 A docking area modeled after Fluxbox's slit:

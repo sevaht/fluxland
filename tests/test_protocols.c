@@ -992,6 +992,40 @@ wlr_data_control_manager_v1_create(struct wl_display *display)
 	return &g_stub_data_control;
 }
 
+/* Tokens the compositor makes (wm_activation_token_create) and finds */
+static struct wlr_xdg_activation_token_v1 g_tokens[4];
+static int g_token_count, g_token_destroyed;
+static struct wlr_xdg_activation_token_v1 *
+wlr_xdg_activation_token_v1_create(struct wlr_xdg_activation_v1 *activation)
+{
+	(void)activation;
+	if (g_token_count >= 4)
+		return NULL;
+	g_tokens[g_token_count].seat = NULL;
+	return &g_tokens[g_token_count++];
+}
+
+static const char *
+wlr_xdg_activation_token_v1_get_name(struct wlr_xdg_activation_token_v1 *t)
+{
+	return t == &g_tokens[0] ? "tok0" : "tokN";
+}
+
+static struct wlr_xdg_activation_token_v1 *
+wlr_xdg_activation_v1_find_token(struct wlr_xdg_activation_v1 *activation,
+	const char *name)
+{
+	(void)activation;
+	return strcmp(name, "tok0") == 0 ? &g_tokens[0] : NULL;
+}
+
+static void
+wlr_xdg_activation_token_v1_destroy(struct wlr_xdg_activation_token_v1 *t)
+{
+	(void)t;
+	g_token_destroyed++;
+}
+
 static struct wlr_xdg_activation_v1 *
 wlr_xdg_activation_v1_create(struct wl_display *display)
 {
@@ -1616,6 +1650,61 @@ test_xdg_activation_no_seat(void)
 	wm_protocols_finish(&server);
 
 	printf("  PASS: test_xdg_activation_no_seat\n");
+}
+
+/* The compositor's own tokens: of the seat, so that user input is claimed */
+static void
+test_activation_token_create_is_of_the_seat(void)
+{
+	reset_globals();
+	g_token_count = 0;
+
+	struct wm_server server;
+	init_server(&server);
+	wm_protocols_init(&server);
+
+	const char *name = wm_activation_token_create(&server);
+	assert(name && strcmp(name, "tok0") == 0);
+	assert(g_tokens[0].seat == server.seat);
+
+	/* Nothing to make it with, no token */
+	struct wlr_xdg_activation_v1 *saved = server.xdg_activation;
+	server.xdg_activation = NULL;
+	assert(wm_activation_token_create(&server) == NULL);
+	server.xdg_activation = saved;
+
+	wm_protocols_finish(&server);
+	printf("  PASS: test_activation_token_create_is_of_the_seat\n");
+}
+
+/* An X11 client's _NET_STARTUP_ID: one use, and only a seat's counts */
+static void
+test_activation_token_consume(void)
+{
+	reset_globals();
+	g_token_destroyed = 0;
+
+	struct wm_server server;
+	init_server(&server);
+	wm_protocols_init(&server);
+
+	assert(!wm_activation_token_consume(&server, NULL));
+	assert(!wm_activation_token_consume(&server, ""));
+	assert(!wm_activation_token_consume(&server, "unknown"));
+	assert(g_token_destroyed == 0);
+
+	/* Known, but not of the user's input: not allowed, and used up */
+	g_tokens[0].seat = NULL;
+	assert(!wm_activation_token_consume(&server, "tok0"));
+	assert(g_token_destroyed == 1);
+
+	/* Of the seat: allowed, and used up */
+	g_tokens[0].seat = server.seat;
+	assert(wm_activation_token_consume(&server, "tok0"));
+	assert(g_token_destroyed == 2);
+
+	wm_protocols_finish(&server);
+	printf("  PASS: test_activation_token_consume\n");
 }
 
 /* Test 14: xdg_activation denied when surface is not a toplevel */
@@ -2602,6 +2691,8 @@ main(void)
 	test_new_virtual_keyboard();
 	test_new_virtual_pointer();
 	test_xdg_activation_no_seat();
+	test_activation_token_create_is_of_the_seat();
+	test_activation_token_consume();
 	test_xdg_activation_not_toplevel();
 	test_xdg_activation_focus_view();
 	test_xdg_activation_no_matching_view();

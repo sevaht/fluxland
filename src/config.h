@@ -301,6 +301,7 @@ struct wm_config {
 	bool clientmenu_use_pixmap; /* clientMenu.usePixmap: icons in window lists */
 	char *systray_pin_left;     /* systray.pinLeft: ids, the first leftmost */
 	char *systray_pin_right;    /* systray.pinRight */
+	int systray_activation_grace_ms; /* systray.activationGrace: 0 = off */
 	/* xwayland.inputEmulation: what X11 programs injecting input
 	 * (XTest) may do; the programs' names, separated by spaces or commas */
 	int eis_policy;             /* enum wm_eis_policy */

@@ -328,6 +328,7 @@ struct wlr_xwayland_surface {
 	struct wlr_xwayland_surface *parent;
 	bool modal;
 	char *title, *class, *instance, *role;
+	char *startup_id;
 	pid_t pid;
 	int16_t x, y;
 	uint16_t width, height;
@@ -779,6 +780,19 @@ struct wm_server {
 	struct wm_toolbar *toolbar;
 	struct wm_style *style;
 };
+
+/* protocols.h: the user's xdg-activation tokens; "good" is one */
+static int g_token_consumed;
+static bool
+wm_activation_token_consume(struct wm_server *server, const char *name)
+{
+	(void)server;
+	if (!name || strcmp(name, "good") != 0)
+		return false;
+	g_token_consumed++;
+	return true;
+}
+
 
 /* Prototypes xwayland.h would provide */
 enum wm_xw_window_class wm_xwayland_classify(
@@ -1758,6 +1772,23 @@ test_activate_focus_stealing(void)
 	assert(g_focus_count == 0);
 	assert(view_of(&c)->urgent);
 	assert(g_iconbar_count > 0);
+
+	/* Another client with a token of the user's input: granted */
+	c.xs.startup_id = "good";
+	wl_signal_emit(&c.xs.events.request_activate, NULL);
+	assert(g_token_consumed == 1);
+	assert(g_focus_view == view_of(&c));
+	c.xs.startup_id = NULL;
+
+	/* c has the focus now (another client's): a name that is no token
+	 * of the user's input gets nothing */
+	g_focus_count = 0;
+	a.xs.startup_id = "forged";
+	wl_signal_emit(&a.xs.events.request_activate, NULL);
+	assert(g_focus_count == 0);
+	assert(g_token_consumed == 1);
+	a.xs.startup_id = NULL;
+	server.focused_view = view_of(&b);
 
 	/* A minimized window of the same client is restored */
 	view_of(&a)->scene_tree->node.enabled = false;

@@ -262,6 +262,7 @@ wm_sources = files(
   'src/import.c',
   'src/dialog.c',
   'src/run_dialog.c',
+  'src/tray_grant.c',
   'src/tooltip.c',
   'src/animation.c',
   'src/atspi_bridge.c',

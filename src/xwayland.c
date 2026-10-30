@@ -40,6 +40,7 @@
 #include "config.h"
 #include "decoration.h"
 #include "icon.h"
+#include "protocols.h"
 #include "pseudo_transparency.h"
 #include "server.h"
 #include "slit.h"
@@ -878,6 +879,15 @@ handle_request_activate(struct wl_listener *listener, void *data)
 	struct wm_view *focused = server->focused_view;
 	bool allowed = !focused || (focused->type == WM_VIEW_XWAYLAND &&
 		focused->xsurface->pid == view->xsurface->pid);
+
+	/*
+	 * Or with an xdg-activation token of the user's input, which an X11
+	 * client names in _NET_STARTUP_ID (as the protocol says for X11) before
+	 * asking: it was given one by whatever the user acted on (a tray
+	 * icon), and it is good once.
+	 */
+	if (wm_activation_token_consume(server, view->xsurface->startup_id))
+		allowed = true;
 	wm_view_request_activate(view, allowed);
 }
 

@@ -442,6 +442,24 @@ separated by spaces or commas, that may or may not do it without asking.
 Tray icons to keep at the left or right of the system tray, by their
 id, separated by spaces or commas: the first of pinLeft leftmost, the
 last of pinRight rightmost.
+.TP
+.B session.screen0.systray.activationGrace
+Milliseconds (default
+.IR 0 :
+off) in which a window of the program that a tray click was passed on to
+may take the focus without having shown it was asked to.  A tray icon's
+program gets an xdg-activation token with the click, if it knows how to
+take one, and then needs nothing more; programs that do not (those whose
+tray icon comes from libappindicator, such as Steam) raise their window on
+their own and are refused as any program asking for the focus is.  With a
+grace, from the click until the call that passed it on is answered (up to
+five seconds), and for this long after, a window of that program or of a
+process it started is allowed.  A click on the program's icon or on one of
+its menu entries starts it.  500 is a reasonable value.  For single programs
+without this, see
+.B [FocusProtection] {Gain}
+in
+.BR fluxland-apps (5).
 .SH TITLEBAR SETTINGS
 .TP
 .B session.screen0.titlebar.left

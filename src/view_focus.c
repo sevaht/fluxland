@@ -21,6 +21,7 @@
 #include "animation.h"
 #include "client_pattern.h"
 #include "tabgroup.h"
+#include "tray_grant.h"
 #include "atspi_bridge.h"
 #include "config.h"
 #include "decoration.h"
@@ -943,6 +944,15 @@ wm_view_request_activate(struct wm_view *view, bool allowed)
 	if (!view || !view->mapped || view->docked || view->no_focus)
 		return false;
 	struct wm_view *focused = view->server->focused_view;
+
+	/* [FocusProtection] {Gain}: this window may ask for the focus */
+	if (view->focus_protection & WM_FOCUS_PROT_GAIN)
+		allowed = true;
+	/* Or it is the answer to a click in the tray menu of its program
+	 * (systray.activationGrace) */
+	if (!allowed && wm_tray_grant_allows(wm_view_pid(view),
+			wm_tray_grant_now_ms()))
+		allowed = true;
 
 	if (!focus_request_allowed(view, true))
 		allowed = false;

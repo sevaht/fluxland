@@ -268,7 +268,10 @@ Whether the window takes the focus when it opens, overriding
 .BI [FocusProtection] " {" "flags" }
 A comma-separated list:
 .B Gain
-(take the focus when opening),
+(take the focus when opening, and when it asks to be activated: an
+application that raises its own window, such as one of a tray menu's
+entries, gets it while no Lock window is focused and the user is not
+typing),
 .B Refuse
 (don't),
 .B Deny

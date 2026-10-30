@@ -137,6 +137,12 @@ class CompositorManager:
         env["XDG_RUNTIME_DIR"] = self._runtime_dir
         env["XDG_CONFIG_HOME"] = os.path.join(self._tmp_dir, "config")
         env["HOME"] = self._tmp_dir
+        # Never the desktop's session bus: the compositor takes the
+        # StatusNotifierWatcher name there, from the running one, and gives
+        # it up for good when it exits (and a test would leave the real
+        # session's environment and tray icons in its hands)
+        env["DBUS_SESSION_BUS_ADDRESS"] = "unix:path=" + os.path.join(
+            self._runtime_dir, "no-bus")
         # Only the test's files: no defaults copied in on first start
         env["FLUXLAND_CONFIG_DIR"] = self._config_dir
         env["WLR_HEADLESS_OUTPUTS"] = str(outputs)

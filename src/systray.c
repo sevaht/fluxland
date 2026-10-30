@@ -32,6 +32,8 @@
 
 #include "config.h"
 #include "pixel_buffer.h"
+#include "protocols.h"
+#include "tray_grant.h"
 #include "systray.h"
 #include "systray_menu.h"
 #include "server.h"
@@ -1118,11 +1120,13 @@ wm_systray_create(struct wm_server *server)
 	r = sd_bus_request_name(systray->bus,
 		"org.kde.StatusNotifierWatcher",
 		SD_BUS_NAME_REPLACE_EXISTING |
-		SD_BUS_NAME_ALLOW_REPLACEMENT);
-	if (r < 0) {
+		SD_BUS_NAME_ALLOW_REPLACEMENT | SD_BUS_NAME_QUEUE);
+	/* (Queued: asked to be the owner of a name that another keeps; and a
+	 * tray that later takes it from us, and goes, gives it back.) */
+	if (r <= 0) {
 		wlr_log(WLR_INFO, "systray: could not acquire "
 			"org.kde.StatusNotifierWatcher: %s (another tray "
-			"may be running)", strerror(-r));
+			"may be running)", r < 0 ? strerror(-r) : "in use");
 		sd_bus_slot_unref(systray->watcher_slot);
 		sd_bus_unref(systray->bus);
 		free(systray);
@@ -1319,12 +1323,92 @@ item_at(struct wm_systray *systray, double local_x, double local_y)
 	return NULL;
 }
 
+/*
+ * The user just acted on an item (a click on it, or on an entry of its
+ * menu): give it an xdg-activation token of that click, as KDE's
+ * StatusNotifierItem has its host do (ProvideXdgActivationToken), so that
+ * what it does about it, such as raising and focusing its window, is the
+ * user's doing and not a window taking the focus by itself.  The token
+ * belongs to the seat, as a client's token from an input event does, and
+ * goes unused (and expires) with an item that has no such method; calls on
+ * the bus arrive in order, so it is there for the one that follows.
+ */
+void
+wm_systray_provide_token(struct wm_systray *systray, const char *bus_name,
+	const char *object_path)
+{
+	const char *token = wm_activation_token_create(systray->server);
+	if (!token) {
+		return;
+	}
+	sd_bus_call_method_async(systray->bus, NULL, bus_name, object_path,
+		"org.kde.StatusNotifierItem", "ProvideXdgActivationToken",
+		NULL, NULL, "s", token);
+}
+
+/* The same for an entry of an item's menu (dbusmenu), found by the menu */
+void
+wm_systray_provide_menu_token(struct wm_systray *systray,
+	const char *bus_name, const char *menu_path)
+{
+	struct wm_systray_item *item;
+	wl_list_for_each(item, &systray->items, link) {
+		if (item->bus_name && item->menu_path &&
+		    strcmp(item->bus_name, bus_name) == 0 &&
+		    strcmp(item->menu_path, menu_path) == 0) {
+			wm_systray_provide_token(systray, item->bus_name,
+				item->object_path);
+			return;
+		}
+	}
+}
+
+/*
+ * systray.activationGrace: a click was passed on to a program, which will
+ * ask for its window to be raised on its own, with nothing to show it was
+ * asked to.  Until the call that passed it on is answered (and a grace
+ * after) a window of that program may take the focus: the reply ends the
+ * grant, with id (0: none) as its user data.
+ */
+uint64_t
+wm_systray_grant_begin(struct wm_systray *systray, const char *bus_name)
+{
+	struct wm_config *config = systray->server->config;
+	if (!config || config->systray_activation_grace_ms <= 0) {
+		return 0;
+	}
+	sd_bus_creds *creds = NULL;
+	pid_t pid = 0;
+	if (sd_bus_get_name_creds(systray->bus, bus_name, SD_BUS_CREDS_PID,
+		    &creds) >= 0) {
+		sd_bus_creds_get_pid(creds, &pid);
+		sd_bus_creds_unref(creds);
+	}
+	return wm_tray_grant_begin(pid, wm_tray_grant_now_ms(),
+		config->systray_activation_grace_ms);
+}
+
+int
+wm_systray_grant_reply(sd_bus_message *reply, void *userdata,
+	sd_bus_error *ret_error)
+{
+	(void)reply;
+	(void)ret_error;
+	wm_tray_grant_end((uint64_t)(uintptr_t)userdata,
+		wm_tray_grant_now_ms());
+	return 0;
+}
+
 void
 wm_systray_call_item_method(struct wm_systray *systray, const char *bus_name,
 	const char *object_path, const char *method, int x, int y)
 {
+	wm_systray_provide_token(systray, bus_name, object_path);
+	uint64_t grant = wm_systray_grant_begin(systray, bus_name);
 	sd_bus_call_method_async(systray->bus, NULL, bus_name, object_path,
-		"org.kde.StatusNotifierItem", method, NULL, NULL,
+		"org.kde.StatusNotifierItem", method, NULL,
+		grant ? wm_systray_grant_reply : NULL,
+		grant ? (void *)(uintptr_t)grant : NULL,
 		"ii", (int32_t)x, (int32_t)y);
 	wm_systray_bus_kick(systray);
 	wlr_log(WLR_DEBUG, "systray: %s on %s", method, bus_name);
@@ -1334,6 +1418,7 @@ wm_systray_call_item_method(struct wm_systray *systray, const char *bus_name,
 struct activate_query {
 	struct item_query q;	/* first: query_take_item() frees it all */
 	int x, y;
+	uint64_t grant;		/* systray.activationGrace's, ended by the reply */
 };
 
 static int
@@ -1343,6 +1428,7 @@ handle_activate_reply(sd_bus_message *reply, void *userdata,
 	struct activate_query *aq = userdata;
 	struct wm_systray *systray = aq->q.systray;
 	int x = aq->x, y = aq->y;
+	wm_tray_grant_end(aq->grant, wm_tray_grant_now_ms());
 	struct wm_systray_item *item = query_take_item(&aq->q);
 	if (!item || !item->menu_path)
 		return 0;
@@ -1406,6 +1492,10 @@ wm_systray_handle_click(struct wm_systray *systray,
 			aq->q.item = item;
 			aq->x = x;
 			aq->y = y;
+			wm_systray_provide_token(systray, item->bus_name,
+				item->object_path);
+			aq->grant = wm_systray_grant_begin(systray,
+				item->bus_name);
 			if (sd_bus_call_method_async(systray->bus, NULL,
 				    item->bus_name, item->object_path,
 				    "org.kde.StatusNotifierItem", "Activate",

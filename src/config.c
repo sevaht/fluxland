@@ -1174,6 +1174,12 @@ apply_tab_config(struct wm_config *config, struct rc_database *db)
 	config->systray_pin_left = pins ? strdup(pins) : NULL;
 	pins = rc_get_string(db, "session.screen0.systray.pinRight");
 	config->systray_pin_right = pins ? strdup(pins) : NULL;
+	config->systray_activation_grace_ms = rc_get_int(db,
+		"session.screen0.systray.activationGrace", 0);
+	if (config->systray_activation_grace_ms < 0)
+		config->systray_activation_grace_ms = 0;
+	else if (config->systray_activation_grace_ms > 10000)
+		config->systray_activation_grace_ms = 10000;
 	{
 		const char *mode = rc_get_string(db,
 			"session.xwayland.inputEmulation");
