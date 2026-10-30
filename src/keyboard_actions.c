@@ -758,14 +758,8 @@ handle_reload_style(struct wm_server *server)
 			server->config->style_file);
 	if (server->toolbar)
 		wm_toolbar_relayout(server->toolbar);
-	if (server->style) {
-		struct wm_view *v;
-		wl_list_for_each(v, &server->views, link) {
-			if (v->decoration)
-				wm_decoration_update(v->decoration,
-					server->style);
-		}
-	}
+	if (server->style)
+		wm_server_refresh_frames(server);
 	return true;
 }
 

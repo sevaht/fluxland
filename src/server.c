@@ -58,6 +58,7 @@
 #include "tooltip.h"
 #include "transient_seat.h"
 #include "view.h"
+#include "view_geometry.h"
 #include "viewporter.h"
 #include "workspace.h"
 #include "tablet.h"
@@ -124,6 +125,23 @@ wm_server_check_rules_reload(struct wm_server *server)
 }
 
 /*
+ * The frames of all windows again, after a style changed their borders,
+ * fonts or titlebars: a window that fills its head (maximized, fullscreen,
+ * a half, a tile) is fitted to it again, as the frame around it is another
+ * size now, and stays in its state
+ */
+void
+wm_server_refresh_frames(struct wm_server *server)
+{
+	struct wm_view *view;
+	wl_list_for_each(view, &server->views, link) {
+		if (view->decoration)
+			wm_decoration_update(view->decoration, server->style);
+	}
+	wm_view_refit_all(server);
+}
+
+/*
  * A style chosen (SetStyle, a menu's [style]): loaded with the overlay,
  * kept as the init's styleFile for the session, and everything drawn
  * with it again; its background shows over the last wallpaper, as
@@ -154,11 +172,7 @@ wm_server_set_style(struct wm_server *server, const char *path)
 		wm_toolbar_relayout(server->toolbar);
 	if (server->slit)
 		wm_slit_relayout(server->slit);
-	struct wm_view *v;
-	wl_list_for_each(v, &server->views, link) {
-		if (v->decoration)
-			wm_decoration_update(v->decoration, server->style);
-	}
+	wm_server_refresh_frames(server);
 	if (server->wallpaper)
 		wm_wallpaper_reload(server->wallpaper);
 	else
@@ -371,15 +385,8 @@ wm_server_reconfigure(struct wm_server *server)
 	}
 
 	/* 11. Refresh all view decorations (if style changed) */
-	if (style_changed && server->style) {
-		struct wm_view *view;
-		wl_list_for_each(view, &server->views, link) {
-			if (view->decoration) {
-				wm_decoration_update(view->decoration,
-					server->style);
-			}
-		}
-	}
+	if (style_changed && server->style)
+		wm_server_refresh_frames(server);
 
 	wlr_log(WLR_INFO, "%s", "configuration reloaded");
 }

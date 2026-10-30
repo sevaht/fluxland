@@ -1405,6 +1405,14 @@ void wm_slit_toggle_hidden(struct wm_slit *s) { (void)s; stub_slit_toggle_hidden
 
 void wm_server_reconfigure(struct wm_server *s) { (void)s; stub_reconfigure_count++; }
 static int stub_reload_keys_count;
+void wm_server_refresh_frames(struct wm_server *s)
+{
+	struct wm_view *v;
+	wl_list_for_each(v, &s->views, link) {
+		if (v->decoration)
+			wm_decoration_update(v->decoration, s->style);
+	}
+}
 void wm_server_reload_keys(struct wm_server *s, bool keep)
 	{ (void)s; (void)keep; stub_reload_keys_count++; }
 bool config_file_changed(const char *p, time_t *m)

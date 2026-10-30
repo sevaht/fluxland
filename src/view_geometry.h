@@ -48,6 +48,9 @@ bool wm_view_maximize_area(struct wm_view *view, struct wlr_box *area);
  */
 void wm_view_refit(struct wm_view *view);
 
+/* wm_view_refit() for every mapped window */
+void wm_view_refit_all(struct wm_server *server);
+
 /*
  * The window is no longer maximized, vertically or horizontally maximized,
  * or tiled to a half: for one the user is resizing by hand, or snapping to

@@ -1099,6 +1099,16 @@ wm_view_refit(struct wm_view *view)
 }
 
 void
+wm_view_refit_all(struct wm_server *server)
+{
+	struct wm_view *view;
+	wl_list_for_each(view, &server->views, link) {
+		if (view->mapped && !view->docked)
+			wm_view_refit(view);
+	}
+}
+
+void
 wm_view_keep_on_screen(struct wm_view *view)
 {
 	struct wm_server *server = view->server;

@@ -1188,6 +1188,13 @@ static void wm_slit_destroy(struct wm_slit *slit)
 	(void)slit;
 }
 
+static int g_refit_all_count;
+static void wm_view_refit_all(struct wm_server *server)
+{
+	(void)server;
+	g_refit_all_count++;
+}
+
 static void wm_decoration_update(struct wm_decoration *dec,
 	struct wm_style *style)
 {

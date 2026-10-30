@@ -531,6 +531,10 @@ void wm_server_reconfigure(struct wm_server *server);
 /* Read the keys file again; the key mode stays when keep_mode */
 void wm_server_reload_keys(struct wm_server *server, bool keep_mode);
 
+/* Update every window's frame after a style change and refit the windows
+ * that fill their head (maximized...); they keep their state */
+void wm_server_refresh_frames(struct wm_server *server);
+
 /* Load and apply a style chosen by the user (SetStyle, a menu's [style]) */
 void wm_server_set_style(struct wm_server *server, const char *path);
 
