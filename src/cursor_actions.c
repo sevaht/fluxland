@@ -62,8 +62,25 @@ view_at(struct wm_server *server, double lx, double ly,
 {
 	struct wlr_scene_node *node =
 		wlr_scene_node_at(&server->scene->tree.node, lx, ly, sx, sy);
-	if (!node || node->type != WLR_SCENE_NODE_BUFFER) {
+	if (!node || (node->type != WLR_SCENE_NODE_BUFFER &&
+	    node->type != WLR_SCENE_NODE_RECT)) {
 		return NULL;
+	}
+
+	/*
+	 * A rectangle is a decoration's border (the titlebar, labels and
+	 * buttons are buffers): it is the window's, so that a border can be
+	 * dragged, and the top pixel of a window at the top of the screen,
+	 * which is border, can grab it
+	 */
+	if (node->type == WLR_SCENE_NODE_RECT) {
+		struct wlr_scene_tree *tree = node->parent;
+		while (tree && !tree->node.data)
+			tree = tree->node.parent;
+		if (surface)
+			*surface = NULL;
+		return tree ? validate_view_data(server,
+			tree->node.data) : NULL;
 	}
 
 	struct wlr_scene_buffer *scene_buffer =
@@ -174,6 +191,11 @@ get_cursor_context(struct wm_server *server, struct wm_view **out_view)
 		double dy = server->cursor->y - view->y;
 		enum wm_decor_region region =
 			wm_decoration_region_at(view->decoration, dx, dy);
+		/* The border above a titlebar is part of it: a window at the
+		 * top of the screen is taken by its topmost pixel */
+		if (region == WM_DECOR_REGION_BORDER_TOP &&
+		    wm_decoration_has_titlebar(view->decoration))
+			region = WM_DECOR_REGION_TITLEBAR;
 		if (region != WM_DECOR_REGION_NONE &&
 		    region != WM_DECOR_REGION_CLIENT) {
 			return region_to_context(region);

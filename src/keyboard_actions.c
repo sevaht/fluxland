@@ -1607,6 +1607,8 @@ wm_execute_action_on(struct wm_server *server, enum wm_action action,
 		return true;
 	case WM_ACTION_SET_TOOLBAR_HEAD:
 		return wm_toolbar_set_head(server, argument);
+	case WM_ACTION_SET_TOOLBAR_OUTPUT:
+		return wm_toolbar_set_output(server, argument);
 	case WM_ACTION_SEND_TO_NEXT_HEAD:
 	case WM_ACTION_SEND_TO_PREV_HEAD: {
 		int offset = 1;

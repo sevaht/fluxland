@@ -1023,6 +1023,9 @@ apply_toolbar_config(struct wm_config *config, struct rc_database *db)
 	if (config->toolbar_alpha > 255) config->toolbar_alpha = 255;
 	config->toolbar_on_head =
 		rc_get_int(db, "session.screen0.toolbar.onhead", 0);
+	free(config->toolbar_on_output);
+	val = rc_get_string(db, "session.screen0.toolbar.onoutput");
+	config->toolbar_on_output = val && *val ? strdup(val) : NULL;
 
 	/* Toolbar tools layout */
 	val = rc_get_string(db, "session.screen0.toolbar.tools");
@@ -1218,6 +1221,9 @@ apply_slit_config(struct wm_config *config, struct rc_database *db)
 		rc_get_string(db, "session.screen0.slit.layer"));
 	config->slit_on_head =
 		rc_get_int(db, "session.screen0.slit.onhead", 0);
+	free(config->slit_on_output);
+	val = rc_get_string(db, "session.screen0.slit.onoutput");
+	config->slit_on_output = val && *val ? strdup(val) : NULL;
 	config->slit_alpha =
 		rc_get_int(db, "session.screen0.slit.alpha", 255);
 	if (config->slit_alpha < 0) config->slit_alpha = 0;
@@ -2062,6 +2068,8 @@ config_destroy(struct wm_config *config)
 	free(config->xkb_variant);
 	free(config->xkb_options);
 	free(config->toolbar_tools);
+	free(config->toolbar_on_output);
+	free(config->slit_on_output);
 	free(config->root_command);
 	free(config->default_deco);
 	free(config->systray_pin_left);

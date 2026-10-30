@@ -249,6 +249,7 @@ struct wlr_box {
 enum wlr_scene_node_type {
 	WLR_SCENE_NODE_TREE,
 	WLR_SCENE_NODE_BUFFER,
+	WLR_SCENE_NODE_RECT,
 };
 
 struct wlr_scene_tree;
@@ -1575,6 +1576,8 @@ static struct wm_decor_button *wm_decoration_button_at(
 static enum wm_decor_region wm_decoration_region_at(
 	struct wm_decoration *d, double x, double y)
 	{ (void)d; (void)x; (void)y; return WM_DECOR_REGION_NONE; }
+static bool wm_decoration_has_titlebar(struct wm_decoration *d)
+	{ (void)d; return true; }
 static int wm_decoration_tab_at(struct wm_decoration *d, double x, double y)
 	{ (void)d; (void)x; (void)y; return -1; }
 static bool wm_decoration_tab_size(struct wm_decoration *d, int *w, int *h)

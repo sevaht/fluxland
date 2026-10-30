@@ -329,6 +329,68 @@ The socket path is auto-detected from `$FLUXLAND_SOCK` or
 
 After installation, access with `man fluxland`, `man fluxland-keys`, etc.
 
+## Known issues
+
+### An X11 window moved by the compositor can highlight what slides under the start of the drag
+
+Seen with Wine/Chromium: a frameless Electron window (the ROTK Launcher)
+dragged by its own title bar. While fluxland moves it, the entries of its
+title bar that pass under the point where the drag began light up as if the
+pointer were over them, mostly in fast drags, and the cursor can show the
+hand of the entry it thinks it is over. Cosmetic; there is no workaround.
+
+What was observed:
+
+- While fluxland runs a move or resize it sends the pointer to nobody
+  (`process_cursor_motion` in `src/cursor.c` returns after
+  `process_cursor_move`). XWayland's idea of the pointer (`xdotool
+  getmouselocation`) stayed where the grab began, mid-drag and after the
+  release, until the next real motion: 866,82 with the real pointer at
+  626,82.
+- X11 windows are sent their new position once a frame
+  (`wm_xwayland_sync_positions`), so the window slides under that stale
+  pointer.
+
+The suspected cause, **not confirmed**: XWayland makes the pointer's place on
+the X screen from each `wl_pointer.motion` as (the position the X server has
+for the window now) + (the surface-local position sent), when it reads the
+Wayland event (`dispatch_absolute_motion` in XWayland's `xwayland-input.c`).
+The window's position is other state, set by the window manager's
+`ConfigureWindow` over the X connection, which is not the Wayland connection,
+and nothing orders one before the other. An X client that asks where the
+pointer is (Wine's `GetCursorPos`, so Chromium) can therefore see them out of
+step.
+
+A workaround was tried and removed because it changed nothing in testing: send
+the pointer to XWayland once a frame, only relative to a window position the
+X server had confirmed with its own `ConfigureNotify` (seen through
+`wlr_xwayland.user_event_handler`, which sees every X event before wlroots
+does), and again when a position was confirmed. That it made no difference
+means the cause is different, or there is more to it (what Chromium hovers
+from may not be what the X server reports), so any real fix should start by
+finding out which.
+
+What a real fix would look like, if the cause is the one above:
+
+- **wlroots**: a signal emitted for every `ConfigureNotify` of a managed
+  window. Today `xsurface->events.set_geometry` only fires when the
+  notify differs from the position `wlr_xwayland_surface_configure()` already
+  wrote into `xsurface->x, y` at once, which is never for a move we asked for,
+  so the compositor cannot tell when the X server has the new position. The
+  `user_event_handler` hook can see it, but it is a single slot shared with
+  `src/xwayland_shape.c`, and a library should offer an event.
+- **Smithay** (a compositor written on it): `XwmHandler::configure_notify` is
+  called for every `ConfigureNotify` the X server sends for a mapped window
+  (`src/xwayland/xwm/mod.rs`). When a grab moves an X11 window: `configure()`
+  it, wait for `configure_notify()` with the new position, then send the
+  pointer relative to that position. No static state, no event hook, no
+  timeout.
+- **XWayland / the protocol**: to end it, XWayland would take the pointer's
+  place from the compositor, or one request would set the window position and
+  the pointer together. Without that, from the X server having the new window
+  position to it having the matching pointer there is a short time in which an
+  X client that asks sees them out of step, whatever the compositor does.
+
 ## Contributing
 
 Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for

@@ -231,7 +231,7 @@ Fluxbox's own styles. See [STYLES.md](STYLES.md).
 | `session.screen0.toolbar.height` | yes |
 | `session.screen0.toolbar.layer` | yes |
 | `session.screen0.toolbar.maxOver` | yes |
-| `session.screen0.toolbar.onhead` | yes |
+| `session.screen0.toolbar.onhead` | yes (heads are numbered by position) |
 | `session.screen0.toolbar.placement` | yes |
 | `session.screen0.toolbar.tools` | yes |
 | `session.screen0.toolbar.visible` | yes |
@@ -352,3 +352,15 @@ Fluxbox's own styles. See [STYLES.md](STYLES.md).
   as it changes.  An override-redirect window is on top when it appears, and a
   window raised afterwards covers it, as on X (a window of its own application
   and popup menus stay over it).
+- **A monitor that goes away and comes back.**  On X the screen stayed as it was
+  when a monitor was powered off, so windows kept their places.  On Wayland an
+  output that goes away (powered off, unplugged, or turned off by a profile)
+  is gone, and its windows are moved onto the others.  fluxland remembers where
+  each was, by the monitor's connector (HDMI-A-1), and when a monitor comes back on it
+  the windows that have not been moved since go back to it.
+- **Head numbers are by position.**  Fluxbox's heads (`toolbar.onhead`, `[Head]`,
+  `SetHead`) are numbered by the X server in an order that does not change as
+  monitors come and go.  Wayland creates and destroys an output as a monitor does,
+  so fluxland numbers the enabled ones by position (left to right, then top to
+  bottom).  `toolbar.onoutput` and `slit.onoutput` (extensions) name a monitor by
+  connector instead, and `SetToolbarOutput` does so at run time.

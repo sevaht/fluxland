@@ -1308,6 +1308,12 @@ wm_decoration_button_at(struct wm_decoration *decoration, double x, double y)
 	return NULL;
 }
 
+bool
+wm_decoration_has_titlebar(struct wm_decoration *decoration)
+{
+	return decoration && preset_has_titlebar(decoration->preset);
+}
+
 enum wm_decor_region
 wm_decoration_region_at(struct wm_decoration *decoration, double x, double y)
 {

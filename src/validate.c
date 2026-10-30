@@ -330,6 +330,7 @@ static const struct init_key_spec init_keys[] = {
 	{"session.screen0.toolbar.layer", VT_LAYER, 0, 0, NULL},
 	{"session.screen0.toolbar.alpha", VT_INT, 0, 255, NULL},
 	{"session.screen0.toolbar.onhead", VT_INT, 0, 32, NULL},
+	{"session.screen0.toolbar.onoutput", VT_STRING, 0, 0, NULL},
 	{"session.screen0.toolbar.maxOver", VT_BOOL, 0, 0, NULL},
 	{"session.screen0.toolbar.tools", VT_STRING, 0, 0, NULL},
 
@@ -379,6 +380,7 @@ static const struct init_key_spec init_keys[] = {
 	{"session.screen0.slit.direction", VT_ENUM, 0, 0, valid_slit_directions},
 	{"session.screen0.slit.layer", VT_LAYER, 0, 0, NULL},
 	{"session.screen0.slit.onhead", VT_INT, 0, 32, NULL},
+	{"session.screen0.slit.onoutput", VT_STRING, 0, 0, NULL},
 	{"session.screen0.slit.alpha", VT_INT, 0, 255, NULL},
 	{"session.screen0.slit.maxOver", VT_BOOL, 0, 0, NULL},
 

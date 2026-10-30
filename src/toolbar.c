@@ -59,6 +59,12 @@ toolbar_output(struct wm_server *server)
 				return output;
 		}
 	}
+	/* toolbar.onoutput while that monitor is there, else toolbar.onhead */
+	struct wm_output *named = server->config ?
+		wm_output_by_name(server, server->config->toolbar_on_output) :
+		NULL;
+	if (named)
+		return named;
 	return wm_output_by_head(server,
 		server->config ? server->config->toolbar_on_head : 0);
 }
@@ -1579,37 +1585,10 @@ wm_toolbar_update_iconbar(struct wm_toolbar *toolbar)
 	}
 }
 
-bool
-wm_toolbar_set_head(struct wm_server *server, const char *argument)
+/* Make name (a head's connector, or NULL for none) the toolbar's choice */
+static bool
+set_toolbar_override(struct wm_server *server, const char *name)
 {
-	if (!server->toolbar)
-		return false;
-	while (argument && (*argument == ' ' || *argument == '\t'))
-		argument++;
-
-	const char *name = NULL;
-	int head;
-	if (!argument || !*argument ||
-	    (safe_atoi(argument, &head) && head == 0)) {
-		/* Back to toolbar.onhead */
-	} else if (safe_atoi(argument, &head)) {
-		struct wm_output *output = wm_output_head(server, head);
-		if (!output)
-			return false;
-		name = output->wlr_output->name;
-	} else {
-		struct wm_output *output;
-		wl_list_for_each(output, &server->outputs, link) {
-			if (!strcmp(output->wlr_output->name, argument) &&
-			    wm_output_head_number(output) > 0) {
-				name = output->wlr_output->name;
-				break;
-			}
-		}
-		if (!name)
-			return false;
-	}
-
 	char *copy = name ? strdup(name) : NULL;
 	if (name && !copy)
 		return false;
@@ -1619,6 +1598,44 @@ wm_toolbar_set_head(struct wm_server *server, const char *argument)
 	/* Windows make room for it where it is now */
 	wm_output_arrange_all(server);
 	return true;
+}
+
+bool
+wm_toolbar_set_head(struct wm_server *server, const char *argument)
+{
+	if (!server->toolbar)
+		return false;
+	while (argument && (*argument == ' ' || *argument == '\t'))
+		argument++;
+
+	int head;
+	if (!argument || !*argument)
+		return set_toolbar_override(server, NULL);
+	if (!safe_atoi(argument, &head))
+		return false;
+	/* 0: back to the toolbar's configured place */
+	if (head == 0)
+		return set_toolbar_override(server, NULL);
+	struct wm_output *output = wm_output_head(server, head);
+	if (!output)
+		return false;
+	/* Kept as the monitor, which the number is only a way to name */
+	return set_toolbar_override(server, output->wlr_output->name);
+}
+
+bool
+wm_toolbar_set_output(struct wm_server *server, const char *argument)
+{
+	if (!server->toolbar)
+		return false;
+	while (argument && (*argument == ' ' || *argument == '\t'))
+		argument++;
+	if (!argument || !*argument)
+		return set_toolbar_override(server, NULL);
+	struct wm_output *output = wm_output_by_name(server, argument);
+	if (!output)
+		return false;
+	return set_toolbar_override(server, output->wlr_output->name);
 }
 
 void

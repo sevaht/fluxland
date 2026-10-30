@@ -395,12 +395,18 @@ A dialog to type the workspace's name in.
 .TP
 .BR SetHead " \fIN\fP, " SendToNextHead ", " SendToPrevHead " [\fIn\fP]"
 .TP
-.BR SetToolbarHead " [\fIoutput\fP]"
-Put the toolbar on an output, by connector name (\fBHDMI\-A\-1\fP) or head
-number as in \fBsession.screen0.toolbar.onhead\fP; without one, or with 0,
-it is on that head again.  Unlike changing the resource it does not rewrite
-the init or reconfigure; it lasts until fluxland exits.  Useful from a
-script, e.g. \fBfluxland\-ctl action SetToolbarHead HDMI\-A\-1\fP.
+.BR SetToolbarHead " [\fIN\fP]"
+Put the toolbar on head \fIN\fP (numbered as in
+\fBsession.screen0.toolbar.onhead\fP, from 1; by position, left to right);
+without one, or with 0, it is where the settings put it again.  Unlike changing
+the resource it does not rewrite the init or reconfigure; it lasts until
+fluxland exits, and stays with the monitor that was the head, which the
+toolbar returns to if it is unplugged and plugged in again.
+.TP
+.BR SetToolbarOutput " [\fIname\fP]"
+The same, given the monitor's connector name (\fBHDMI\-A\-1\fP), a fluxland
+extension.  Useful from a script, e.g.
+\fBfluxland\-ctl action SetToolbarOutput HDMI\-A\-1\fP.
 .TP
 .BR ShowDesktop ", " CloseAllWindows
 .TP

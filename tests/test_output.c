@@ -376,6 +376,7 @@ struct wm_output {
 	struct wlr_box full_area;
 	struct wlr_box usable_area;
 	struct wm_workspace *active_workspace;
+	bool rejoined;
 	bool lock_blanked;
 	struct wl_listener frame;
 	struct wl_listener request_state;
@@ -519,6 +520,17 @@ wm_ipc_broadcast_event(struct wm_ipc_server *ipc,
 static void
 wm_drm_lease_offer_output(struct wm_server *s, struct wlr_output *o)
 { (void)s; (void)o; }
+
+/* output_memory.c has its own tests (UI: test_output_memory.py) */
+void wm_output_memory_depart(struct wm_server *s, struct wlr_output *o)
+{ (void)s; (void)o; }
+void wm_output_memory_departed(struct wm_server *s, struct wlr_output *o)
+{ (void)s; (void)o; }
+void wm_output_memory_return(struct wm_server *s, struct wlr_output *o)
+{ (void)s; (void)o; }
+void wm_output_memory_finish(void)
+{
+}
 
 void
 wm_pseudo_sync(struct wm_server *s)

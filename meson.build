@@ -274,6 +274,7 @@ wm_sources = files(
   'src/ext_workspace.c',
   'src/output.c',
   'src/output_config.c',
+  'src/output_memory.c',
   'src/pixel_buffer.c',
   'src/input.c',
   'src/input_config.c',

@@ -144,6 +144,7 @@ static const struct action_map actions[] = {
 	{"SendToWorkspace",    WM_ACTION_SEND_TO_WORKSPACE},
 	{"SetHead",            WM_ACTION_SET_HEAD},
 	{"SetToolbarHead",     WM_ACTION_SET_TOOLBAR_HEAD},
+	{"SetToolbarOutput",   WM_ACTION_SET_TOOLBAR_OUTPUT},
 	{"SetDecor",           WM_ACTION_SET_DECOR},
 	{"SetEnv",             WM_ACTION_SET_ENV},
 	{"SetLayer",           WM_ACTION_SET_LAYER},

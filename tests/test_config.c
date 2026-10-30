@@ -1847,6 +1847,34 @@ test_pseudo_transparency(void)
 	printf("  PASS: test_pseudo_transparency\n");
 }
 
+/* Test: toolbar.onoutput and slit.onoutput (a connector name, or none) */
+static void
+test_on_output(void)
+{
+	write_file(TEST_INIT, "\n");
+	struct wm_config *c = config_create();
+	config_load(c, TEST_INIT);
+	assert(c->toolbar_on_output == NULL);
+	assert(c->slit_on_output == NULL);
+	config_destroy(c);
+
+	write_file(TEST_INIT,
+		"session.screen0.toolbar.onoutput: HDMI-A-1\n"
+		"session.screen0.slit.onoutput: DP-2\n"
+		"session.screen0.toolbar.onhead: 2\n");
+	c = config_create();
+	config_load(c, TEST_INIT);
+	assert(c->toolbar_on_output && !strcmp(c->toolbar_on_output, "HDMI-A-1"));
+	assert(c->slit_on_output && !strcmp(c->slit_on_output, "DP-2"));
+	assert(c->toolbar_on_head == 2);
+	/* reloaded without it: none again, nothing left over */
+	write_file(TEST_INIT, "\n");
+	config_load(c, TEST_INIT);
+	assert(c->toolbar_on_output == NULL);
+	config_destroy(c);
+	printf("  PASS: test_on_output\n");
+}
+
 /* Test: the snap layout picker's keys, layouts, and their defaults */
 static void
 test_snap_layouts(void)
@@ -2021,6 +2049,7 @@ main(void)
 	test_input_emulation();
 	test_xwayland_keyboard_grab();
 	test_snap_layouts();
+	test_on_output();
 	test_pseudo_transparency();
 	test_dpi();
 	test_placement_policies();

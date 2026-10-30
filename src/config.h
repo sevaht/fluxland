@@ -257,6 +257,7 @@ struct wm_config {
 	int toolbar_layer;
 	int toolbar_alpha;
 	int toolbar_on_head;
+	char *toolbar_on_output; /* toolbar.onoutput: a connector name, or NULL */
 	char *toolbar_tools; /* configurable tool layout string */
 	/* toolbar.button.NAME.label and .commands (a command for each
 	 * mouse button, separated by ':') */
@@ -341,6 +342,7 @@ struct wm_config {
 	int slit_direction;
 	int slit_layer;
 	int slit_on_head;
+	char *slit_on_output;  /* slit.onoutput: a connector name, or NULL */
 	int slit_alpha;       /* 0-255, default 255 */
 	bool slit_max_over;   /* default false */
 	char *slitlist_file;  /* path to slitlist file */

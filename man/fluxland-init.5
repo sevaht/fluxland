@@ -368,6 +368,15 @@ Head (monitor) the toolbar is on, numbered from 1 as in Fluxbox;
 0 or a missing head means head 1 (default: 0). See
 .BR OUTPUTS .
 .TP
+.B session.screen0.toolbar.onoutput
+The monitor the toolbar is on, by its connector name (\fBHDMI\-A\-1\fR, as
+.B wlr\-randr
+lists them), a fluxland extension.  While that monitor is connected the toolbar
+is on it, whatever
+.B onhead
+says; when it is not, the toolbar is on its head, and goes back to it
+when it returns.  Default: none.
+.TP
 .B session.screen0.toolbar.tools
 The toolbar's tools, separated by commas (as Fluxbox writes them) or
 spaces:
@@ -612,6 +621,10 @@ Slit stacking layer, as
 Head (monitor) the slit is on, numbered from 1 as in Fluxbox;
 0 or a missing head means head 1 (default: 0).
 .TP
+.B session.screen0.slit.onoutput
+The monitor the slit is on, by connector name, as for
+.BR toolbar.onoutput .
+.TP
 .B session.screen0.slit.alpha
 Slit opacity (0\-255, default: 255).
 .TP
@@ -789,9 +802,12 @@ or
 last until then.
 .PP
 Heads, used by \fBonhead\fR, \fBSetHead\fR and the \fB[Head]\fR window
-rule, are the enabled monitors in the order they were connected, from 1.
-When a monitor is unplugged or turned off, its windows, toolbar and slit
-move to the remaining ones.
+rule, are the enabled monitors by position, from 1: left to right, then top
+to bottom (X's order for Fluxbox was stable as monitors came and went; going by
+the order they connected in was not).  When a monitor is unplugged or turned
+off, its windows, toolbar and slit move to the remaining ones; the toolbar
+and slit go back to a monitor named for them when it returns, and so do the
+windows that were on it and have not been moved since.
 .TP
 .B enabled
 false turns the monitor off.
