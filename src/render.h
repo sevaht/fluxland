@@ -70,6 +70,13 @@ cairo_surface_t *wm_render_text(const char *text, const struct wm_font *font,
 int wm_measure_text_width(const char *text, const struct wm_font *font,
 	float scale);
 
+/*
+ * How far the first len bytes of text advance (spaces at the end count,
+ * which a measure of what is drawn leaves out): where a text cursor goes.
+ */
+int wm_text_advance(const char *text, size_t len, const struct wm_font *font,
+	float scale);
+
 /* A font's height (ascent and descent) in pixels, as Fluxbox's
  * Font::height() */
 int wm_font_height(const struct wm_font *font, float scale);

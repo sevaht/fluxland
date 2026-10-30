@@ -81,7 +81,10 @@ focus_view(struct wm_view *view, struct wlr_surface *surface, bool raise)
 	/* Callers may pass NULL for "the view's own surface" */
 	if (!surface)
 		surface = wm_view_surface(view);
-	if (prev_surface == surface) {
+	/* (Two windows with no surface, an internal one, are told apart by
+	 * which has the focus) */
+	if (prev_surface == surface &&
+	    (surface || server->focused_view == view)) {
 		server->focus_user_initiated = false;
 		return;
 	}
@@ -92,9 +95,10 @@ focus_view(struct wm_view *view, struct wlr_surface *surface, bool raise)
 		wm_view_set_urgent(view, false);
 
 	/* Deactivate the previously focused toplevel */
-	if (prev_surface) {
-		struct wm_view *prev_view =
-			wm_view_from_surface(server, prev_surface);
+	if (prev_surface || server->focused_view) {
+		struct wm_view *prev_view = prev_surface ?
+			wm_view_from_surface(server, prev_surface) :
+			server->focused_view;
 		if (prev_view && prev_view != view)
 			wm_view_set_activated(prev_view, false);
 		/* Update decoration on previously focused view */
@@ -192,13 +196,16 @@ focus_view(struct wm_view *view, struct wlr_surface *surface, bool raise)
 		/* With no keyboard yet too: the focus is the window's, and
 		 * a keyboard plugged in later types into it (wlroots sends
 		 * it the enter); the input method relay looks it up */
-		if (keyboard)
-			wlr_seat_keyboard_notify_enter(seat,
-				wm_view_surface(view), keyboard->keycodes,
-				keyboard->num_keycodes, &keyboard->modifiers);
+		struct wlr_surface *ksurface = wm_view_surface(view);
+		if (!ksurface)	/* an internal window types by itself */
+			wlr_seat_keyboard_notify_clear_focus(seat);
+		else if (keyboard)
+			wlr_seat_keyboard_notify_enter(seat, ksurface,
+				keyboard->keycodes, keyboard->num_keycodes,
+				&keyboard->modifiers);
 		else
-			wlr_seat_keyboard_notify_enter(seat,
-				wm_view_surface(view), NULL, 0, NULL);
+			wlr_seat_keyboard_notify_enter(seat, ksurface, NULL,
+				0, NULL);
 	}
 
 	/* Notify text input relay of focus change for IME */

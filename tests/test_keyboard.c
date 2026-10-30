@@ -485,12 +485,10 @@ wm_dialog_open(struct wm_server *s, const char *title, const char *pre,
 	snprintf(g_dialog_precommand, sizeof(g_dialog_precommand), "%s",
 		pre ? pre : "");
 }
-static bool wm_dialog_is_open(struct wm_server *s)
-	{ (void)s; return g_dialog_open; }
 static bool
-wm_dialog_handle_key(struct wm_server *s, xkb_keysym_t sym,
+wm_internal_view_key(struct wm_view *v, xkb_keysym_t sym,
 	const char *utf8, uint32_t mods)
-	{ (void)s; (void)sym; (void)utf8; (void)mods; return true; }
+	{ (void)v; (void)sym; (void)utf8; (void)mods; return g_dialog_open; }
 
 static int
 xkb_state_key_get_syms(struct xkb_state *state, xkb_keycode_t key,
@@ -750,6 +748,7 @@ enum wm_action {
 	WM_ACTION_SET_WORKSPACE_NAME,
 	WM_ACTION_SET_WORKSPACE_NAME_DIALOG,
 	WM_ACTION_COMMAND_DIALOG,
+	WM_ACTION_RUN_DIALOG,
 	WM_ACTION_SET_TITLE,
 	WM_ACTION_SET_TITLE_DIALOG,
 	WM_ACTION_SET_RESOURCE_VALUE,

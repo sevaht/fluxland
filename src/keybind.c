@@ -152,6 +152,7 @@ static const struct action_map actions[] = {
 	{"SetWorkspaceName",   WM_ACTION_SET_WORKSPACE_NAME},
 	{"SetWorkspaceNameDialog", WM_ACTION_SET_WORKSPACE_NAME_DIALOG},
 	{"CommandDialog",      WM_ACTION_COMMAND_DIALOG},
+	{"RunDialog",          WM_ACTION_RUN_DIALOG},
 	{"SetTitle",           WM_ACTION_SET_TITLE},
 	{"SetTitleDialog",     WM_ACTION_SET_TITLE_DIALOG},
 	{"SetResourceValue",   WM_ACTION_SET_RESOURCE_VALUE},

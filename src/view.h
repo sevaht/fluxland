@@ -31,6 +31,7 @@ struct wm_view;
 enum wm_view_type {
 	WM_VIEW_XDG,        /* xdg-shell toplevel (view.c) */
 	WM_VIEW_XWAYLAND,   /* managed X11 window (xwayland.c) */
+	WM_VIEW_INTERNAL,   /* drawn by the compositor (view_internal.c) */
 };
 
 /*

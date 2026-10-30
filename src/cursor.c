@@ -41,7 +41,6 @@
 #include "config.h"
 #include "cursor.h"
 #include "command.h"
-#include "dialog.h"
 #include "cursor_actions.h"
 #include "cursor_snap.h"
 #include "server.h"
@@ -548,10 +547,6 @@ process_cursor_motion(struct wm_server *server, uint32_t time)
 	 * When locked, don't interact with normal views. Lock surfaces
 	 * (e.g. gtklock's buttons) still get pointer input.
 	 */
-	if (wm_dialog_handle_motion(server, server->cursor->x,
-	    server->cursor->y))
-		return;
-
 	if (wm_session_is_locked(server)) {
 		double sx, sy;
 		struct wlr_surface *ls = wm_session_lock_surface_at(server,
@@ -721,7 +716,7 @@ rebase_now(void *data)
 	if (!server->cursor || !server->seat ||
 	    server->cursor_mode != WM_CURSOR_PASSTHROUGH ||
 	    server->seat->pointer_state.button_count > 0 ||
-	    wm_session_is_locked(server) || wm_dialog_is_open(server))
+	    wm_session_is_locked(server))
 		return;
 
 	double sx, sy;
@@ -951,12 +946,6 @@ handle_cursor_button(struct wl_listener *listener, void *data)
 	if (event->state == WL_POINTER_BUTTON_STATE_PRESSED)
 		wm_layer_shell_focus_on_click(server,
 			server->seat->pointer_state.focused_surface);
-
-	/* An open dialog: its title drags it, a click elsewhere ends it */
-	if (wm_dialog_handle_button(server, server->cursor->x,
-	    server->cursor->y,
-	    event->state == WL_POINTER_BUTTON_STATE_PRESSED))
-		return;
 
 	if (event->state == WL_POINTER_BUTTON_STATE_RELEASED) {
 		/* A titlebar button shows window.button.pressed while held */

@@ -25,7 +25,6 @@
 
 #include "text_input.h"
 #include "keyboard.h"
-#include "dialog.h"
 #include "keyboard_actions.h"
 #include "server.h"
 #include "config.h"
@@ -36,6 +35,7 @@
 #include "xwayland_grab.h"
 #include "session_lock.h"
 #include "view.h"
+#include "view_internal.h"
 
 /*
  * Reset chain state back to root level.
@@ -384,14 +384,17 @@ handle_key(struct wl_listener *listener, void *data)
 		return;
 	}
 
-	/* An open dialog (CommandDialog...) takes the keys typed */
-	if (event->state == WL_KEYBOARD_KEY_STATE_PRESSED &&
-	    wm_dialog_is_open(server) && nsyms > 0) {
+	/* A window of the compositor's own (a dialog) takes the keys typed
+	 * while it has the focus; the key bindings of Alt and Mod4 stay */
+	if (event->state == WL_KEYBOARD_KEY_STATE_PRESSED && nsyms > 0 &&
+	    server->focused_view &&
+	    !(modifiers & (WLR_MODIFIER_ALT | WLR_MODIFIER_LOGO))) {
 		char utf8[16] = "";
 		xkb_state_key_get_utf8(keyboard->wlr_keyboard->xkb_state,
 			keycode, utf8, sizeof(utf8));
-		wm_dialog_handle_key(server, syms[0], utf8, modifiers);
-		return;
+		if (wm_internal_view_key(server->focused_view, syms[0], utf8,
+				modifiers))
+			return;
 	}
 
 	if (event->state == WL_KEYBOARD_KEY_STATE_PRESSED) {

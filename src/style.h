@@ -211,6 +211,10 @@ struct wm_style {
 	int menu_border_width;
 	uint8_t menu_round_corners;	/* menu.roundCorners: WM_CORNER_* */
 
+	/* The line of the text dialogs (CommandDialog...): dialog.font,
+	 * not a part of the window's frame */
+	struct wm_font dialog_font;
+
 	/* A tray icon's tooltip (systray.tooltip.*) */
 	struct wm_font systray_tooltip_font;
 	struct wm_color systray_tooltip_color;

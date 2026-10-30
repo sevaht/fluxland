@@ -186,21 +186,53 @@ Choose **Fluxland** in your display manager, or run `fluxland` from a text conso
 | ninja | `ninja-build` | `ninja` |
 | C17 compiler | `gcc` or `clang` | `gcc` or `clang` |
 | wlroots 0.20 | built from `subprojects/` (or a system `wlroots-0.20`) | `wlroots0.20` |
-| wayland | `libwayland-dev` | `wayland` |
-| wayland-protocols (>= 1.32) | `wayland-protocols` | `wayland-protocols` |
+| wayland (>= 1.24, with wayland-client) | `libwayland-dev` | `wayland` |
+| wayland-protocols (>= 1.47) | `wayland-protocols` | `wayland-protocols` |
 | xkbcommon | `libxkbcommon-dev` | `libxkbcommon` |
 | libinput (>= 1.14) | `libinput-dev` | `libinput` |
-| pixman | `libpixman-1-dev` | `pixman` |
+| pixman (>= 0.46) | `libpixman-1-dev` | `pixman` |
 | pangocairo | `libpango1.0-dev` | `pango` |
 | libdrm | `libdrm-dev` | `libdrm` |
+| pkg-config | `pkgconf` | `pkgconf` |
+| wayland-scanner | `libwayland-bin` | `wayland` |
 
 ### Optional dependencies
 
 | Dependency | Debian/Ubuntu | Arch | Purpose |
 |---|---|---|---|
 | XWayland | `xwayland` | `xorg-xwayland` | X11 application support |
-| xcb, xcb-ewmh, xcb-icccm | `libxcb1-dev libxcb-ewmh-dev libxcb-icccm4-dev` | `libxcb xcb-util-wm` | XWayland EWMH/ICCCM |
+| xcb, xcb-ewmh, xcb-icccm, xcb-shape | `libxcb1-dev libxcb-ewmh-dev libxcb-icccm4-dev libxcb-shape0-dev` | `libxcb xcb-util-wm` | XWayland EWMH/ICCCM, X Shape clipping |
+| gdk-pixbuf (>= 2.36) | `libgdk-pixbuf-2.0-dev` | `gdk-pixbuf2` | XPM/JPEG/BMP images in styles and icons (`-Dpixbuf`) |
+| libsystemd or libelogind | `libsystemd-dev` | `systemd-libs` | D-Bus (system tray, notifications, session) |
+| gettext (libintl) | `gettext` | `gettext` | translations (`libintl` is part of glibc on Linux) |
 | libei (libeis) | `libei-dev` | `libei` | Input emulation of X11 programs (Steam Input, xdotool); needs XWayland |
+
+### Runtime programs
+
+Programs fluxland starts itself, or that its features rely on:
+
+| Program | Debian/Ubuntu | Arch | Needed for |
+|---|---|---|---|
+| dbus (`dbus-update-activation-environment`) | `dbus-bin` | `dbus` | giving the session's environment to D-Bus activated programs |
+| xdg-desktop-portal + xdg-desktop-portal-wlr | `xdg-desktop-portal xdg-desktop-portal-wlr` | `xdg-desktop-portal xdg-desktop-portal-wlr` | screen sharing and recording (see `docs/SCREEN_RECORDING.md`) |
+| a `/bin/sh` | | | `Exec`, `fluxland-run` and menu commands run through the shell |
+
+`RunDialog` starts `fluxland-run`, installed with fluxland (it needs only libwayland-client and the libraries above); the lines run are kept in `$XDG_STATE_HOME/fluxland/run_history`.
+
+### Test dependencies
+
+For `python3 -m pytest tests/ui/` (end-to-end tests that start a headless fluxland):
+
+| Dependency | Debian/Ubuntu | Arch | Purpose |
+|---|---|---|---|
+| python3, pytest, pytest-timeout, pytest-html, Pillow | `python3-pytest python3-pytest-timeout python3-pytest-html python3-pil` | `python-pytest python-pytest-timeout python-pytest-html python-pillow` | the test runner and screenshot comparison (`tests/ui/requirements.txt`) |
+| wtype | `wtype` | `wtype` | typing into the compositor (dialogs, key bindings) |
+| wlrctl | `wlrctl` | `wlrctl` | pointer input |
+| grim | `grim` | `grim` | screenshots |
+| foot | `foot` | `foot` | the test windows |
+| xterm, xwininfo, xdotool | `xterm x11-utils xdotool` | `xterm xorg-xwininfo xdotool` | XWayland tests (skipped without) |
+| swaybg, wlr-randr, wayland-info | `swaybg wlr-randr wayland-utils` | `swaybg wlr-randr wayland-utils` | wallpaper, output and protocol tests (skipped without) |
+| clang | `clang` | `clang` | the fuzz targets (`tools/ci.sh fuzz`) |
 
 ### Runtime companions (recommended)
 

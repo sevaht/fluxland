@@ -261,6 +261,7 @@ endif
 wm_sources = files(
   'src/import.c',
   'src/dialog.c',
+  'src/run_dialog.c',
   'src/tooltip.c',
   'src/animation.c',
   'src/atspi_bridge.c',
@@ -287,6 +288,7 @@ wm_sources = files(
   'src/pseudo_transparency.c',
   'src/view.c',
   'src/view_xdg.c',
+  'src/view_internal.c',
   'src/view_focus.c',
   'src/view_geometry.c',
   'src/workspace.c',
@@ -390,6 +392,35 @@ endif
 executable(
   'fluxland-ctl',
   files('tools/fluxland-ctl.c'),
+  install: true,
+)
+
+# --- fluxland-run: a window to type a program in (fbrun's place) ---
+
+fs = import('fs')
+fl_scanner = find_program('wayland-scanner')
+fl_proto_dir = wayland_protos.get_variable('pkgdatadir')
+fl_run_protocols = []
+foreach xml : [
+  fl_proto_dir / 'stable/xdg-shell/xdg-shell.xml',
+  fl_proto_dir / 'unstable/xdg-decoration/xdg-decoration-unstable-v1.xml',
+]
+  base = fs.stem(xml)
+  fl_run_protocols += custom_target(base + '-client-protocol.h',
+    input: xml,
+    output: base + '-client-protocol.h',
+    command: [fl_scanner, 'client-header', '@INPUT@', '@OUTPUT@'])
+  fl_run_protocols += custom_target(base + '-protocol.c',
+    input: xml,
+    output: base + '-protocol.c',
+    command: [fl_scanner, 'private-code', '@INPUT@', '@OUTPUT@'])
+endforeach
+executable(
+  'fluxland-run',
+  files('tools/fluxland-run.c', 'src/run_dialog.c'),
+  fl_run_protocols,
+  include_directories: include_directories('src'),
+  dependencies: [dependency('wayland-client'), xkbcommon, pangocairo],
   install: true,
 )
 

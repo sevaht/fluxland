@@ -212,3 +212,9 @@
   [app] (class=kitty)
   [app] (class=xterm)
 [end]
+
+# The run window (fluxland-run, RunDialog): in the middle of the head, as
+# fbrun -center was
+[app] (class=fluxland-run)
+  [Position] (Center) {0 0}
+[end]

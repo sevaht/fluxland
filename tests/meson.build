@@ -45,6 +45,15 @@ test_session_env = executable(
 )
 test('session_env', test_session_env)
 
+# --- test_run_dialog: run dialog completion and history ---
+test_run_dialog = executable(
+  'test_run_dialog',
+  files('test_run_dialog.c', '../src/run_dialog.c'),
+  include_directories: test_inc,
+  install: false,
+)
+test('run_dialog', test_run_dialog)
+
 # --- test_icon: iconbar icons (theme / desktop file lookup, client pixels) ---
 test_icon = executable(
   'test_icon',

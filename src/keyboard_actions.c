@@ -10,6 +10,7 @@
 
 #define _GNU_SOURCE
 #include <fcntl.h>
+#include <limits.h>
 #include <ctype.h>
 #include <signal.h>
 #include <sys/stat.h>
@@ -1162,6 +1163,33 @@ wm_execute_action(struct wm_server *server,
 	return wm_execute_action_on(server, action, argument, NULL);
 }
 
+/*
+ * RunDialog: fluxland-run, an ordinary window of its own (as fbrun is), from
+ * next to this program when it is there (a build, an unpacked tree), else
+ * from PATH
+ */
+static void
+run_dialog_spawn(void)
+{
+	char exe[PATH_MAX];
+	ssize_t n = readlink("/proc/self/exe", exe, sizeof(exe) - 1);
+	char cmd[PATH_MAX + 32];
+	if (n > 0) {
+		exe[n] = '\0';
+		char *slash = strrchr(exe, '/');
+		if (slash) {
+			snprintf(slash + 1, sizeof(exe) - (size_t)(slash + 1 - exe),
+				"fluxland-run");
+			if (access(exe, X_OK) == 0 && !strchr(exe, '\'')) {
+				snprintf(cmd, sizeof(cmd), "exec '%s'", exe);
+				wm_spawn_command(cmd);
+				return;
+			}
+		}
+	}
+	wm_spawn_command("exec fluxland-run");
+}
+
 bool
 wm_execute_action_on(struct wm_server *server, enum wm_action action,
 	const char *argument, struct wm_view *target)
@@ -1223,6 +1251,9 @@ wm_execute_action_on(struct wm_server *server, enum wm_action action,
 	}
 	case WM_ACTION_COMMAND_DIALOG:
 		wm_dialog_open(server, _("Fluxbox Command"), NULL, NULL, NULL);
+		return true;
+	case WM_ACTION_RUN_DIALOG:
+		run_dialog_spawn();
 		return true;
 	case WM_ACTION_SET_TITLE:
 		/* The window keeps it, whatever it calls itself after */

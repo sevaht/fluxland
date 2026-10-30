@@ -898,6 +898,22 @@ wm_measure_text_width(const char *text, const struct wm_font *font,
 }
 
 int
+wm_text_advance(const char *text, size_t len, const struct wm_font *font,
+	float scale)
+{
+	ensure_measurement_context();
+	PangoFontDescription *desc = font_description(font, scale);
+	pango_layout_set_font_description(measure_layout, desc);
+	pango_font_description_free(desc);
+	pango_layout_set_width(measure_layout, -1);
+	pango_layout_set_ellipsize(measure_layout, PANGO_ELLIPSIZE_NONE);
+	pango_layout_set_text(measure_layout, text, (int)len);
+	PangoRectangle logical;
+	pango_layout_get_pixel_extents(measure_layout, NULL, &logical);
+	return logical.width;
+}
+
+int
 wm_font_height(const struct wm_font *font, float scale)
 {
 	if (!font)

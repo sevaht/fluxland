@@ -479,6 +479,19 @@ A style file, or a directory with theme.cfg or style.cfg.
 A dialog to type a command in, as on a key binding: Return runs it,
 Escape closes it, Tab finishes a command's name.
 .TP
+.B RunDialog
+Open \fBfluxland-run\fR, a window to type a program in, in the place of
+fbrun.  It is an ordinary window of its own, with the style's frame: it
+shows in the iconbar, takes the focus, and \fIapps\fR rules apply to it
+(its class is \fIfluxland-run\fR; the default \fIapps\fR file centers
+it).  Return runs the line as Exec does, Escape closes it.  Tab finishes
+the program name (the first word) or a file name, and again goes through
+the names there are.  Up and Down go through the lines run before, which
+are kept in
+\fI$XDG_STATE_HOME/fluxland/run_history\fR
+(\fI~/.local/state/fluxland/run_history\fR).  \fBfluxland-run -f \fIFONT\fR
+sets its Pango font (default \fISans 12\fR) when it is started by hand.
+.TP
 .BI SetTitle " title\fR, " SetTitleDialog
 The window's title (or a dialog to type it in), kept whatever the
 program calls itself after.

@@ -330,6 +330,15 @@ Menu border width (default: 1).
 The menu's corners to round, as
 .BR window.roundCorners .
 .TP
+.B dialog.font
+The font of the line of the text dialogs the compositor draws
+(\fBCommandDialog\fP, \fBSetTitleDialog\fP...; \fBRunDialog\fP is a window
+of its own, \fBfluxland-run\fP, and has its own font), default
+.IR "pango:Sans 12" ,
+the system's sans.  It is a program's own text, not a part of the window's
+frame, so it is read exactly, not through \fI*.font\fP, and its shadow,
+halo and weight are what it says.
+.TP
 .B systray.tooltip.font
 The font of a tray icon's tooltip (default
 .IR "pango:DejaVu Sans 11" ;

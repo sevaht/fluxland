@@ -1264,6 +1264,13 @@ font_finish(struct wm_font *font)
  * the default holds under any style and a style changes it by setting them.
  */
 static void
+dialog_defaults(struct wm_style *s)
+{
+	font_finish(&s->dialog_font);
+	s->dialog_font = style_parse_font("pango:Sans 12");
+}
+
+static void
 systray_tooltip_defaults(struct wm_style *s)
 {
 	font_finish(&s->systray_tooltip_font);
@@ -1284,6 +1291,18 @@ exact_int(struct rc_database *db, const char *key, int def, int min, int max)
 {
 	int v = rc_get_int(db, key, def);
 	return v < min ? min : v > max ? max : v;
+}
+
+/* dialog.font, read exactly (not through *.font) */
+static void
+load_dialog(struct wm_style *s, struct rc_database *db)
+{
+	dialog_defaults(s);
+	const char *val = rc_get_string(db, "dialog.font");
+	if (val) {
+		font_finish(&s->dialog_font);
+		s->dialog_font = style_parse_font(val);
+	}
 }
 
 static void
@@ -1437,6 +1456,7 @@ style_create(void)
 	s->slit_border_width = DEFAULT_BORDER_WIDTH;
 
 	systray_tooltip_defaults(s);
+	dialog_defaults(s);
 
 	/* Default fonts */
 	s->window_label_focus_font = default_font();
@@ -1461,6 +1481,9 @@ style_apply_db(struct wm_style *s, struct rc_database *db)
 
 	/* --- Window frame, as FbWinFrameTheme and its label themes --- */
 	load_window(s, db, sd);
+
+	/* --- The text dialogs' line --- */
+	load_dialog(s, db);
 
 	/* --- A tray icon's tooltip --- */
 	load_systray_tooltip(s, db);
@@ -1685,6 +1708,7 @@ style_clear(struct wm_style *s)
 	font_finish(&s->menu_frame_font);
 	font_finish(&s->menu_hilite_font);
 	font_finish(&s->systray_tooltip_font);
+	font_finish(&s->dialog_font);
 	free(s->menu_submenu_pixmap);
 	free(s->menu_hilite_submenu_pixmap);
 	free(s->menu_selected_pixmap);
