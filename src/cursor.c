@@ -823,7 +823,7 @@ handle_cursor_motion_absolute(struct wl_listener *listener, void *data)
 static uint32_t
 pointer_context(struct wm_server *server, struct wm_view **view)
 {
-	if (wm_toolbar_contains(server->toolbar, server->cursor->x,
+	if (wm_pointer_on_toolbar(server, server->cursor->x,
 	    server->cursor->y)) {
 		*view = NULL;
 		return WM_MOUSE_CTX_TOOLBAR;
@@ -1144,7 +1144,7 @@ handle_cursor_button(struct wl_listener *listener, void *data)
 
 #ifdef WM_HAS_SYSTRAY
 	/* A click on a tray icon, wherever the systemtray tool is */
-	if (server->systray && wm_toolbar_contains(server->toolbar,
+	if (server->systray && wm_pointer_on_toolbar(server,
 		server->cursor->x, server->cursor->y)) {
 		if (wm_systray_handle_click(server->systray,
 			server->cursor->x - server->systray->x,

@@ -164,8 +164,19 @@ wl_signal_emit(struct wl_signal *signal, void *data)
 
 struct wl_display { int dummy; };
 
-/* --- wlr_log stub --- */
-#define wlr_log(verb, fmt, ...) ((void)0)
+/*
+ * --- wlr_log stub ---
+ * A function, not an empty macro: the real wlr_log evaluates its arguments
+ * (a handler that logs through a null pointer crashes there), so the stub
+ * has to as well or a test cannot see it.
+ */
+static void
+stub_wlr_log(int verbosity, const char *format, ...)
+{
+	(void)verbosity;
+	(void)format;
+}
+#define wlr_log(verb, fmt, ...) stub_wlr_log((verb), (fmt), ##__VA_ARGS__)
 #define WLR_ERROR 1
 #define WLR_INFO  3
 #define WLR_DEBUG 7
@@ -1844,6 +1855,15 @@ test_tearing_new_object(void)
 	/* Verify listeners were added to the control's signals */
 	assert(!wl_list_empty(&control.events.set_hint.listener_list));
 	assert(!wl_list_empty(&control.events.destroy.listener_list));
+
+	/*
+	 * wlroots emits set_hint with no data (NULL), and a client's hint
+	 * must not crash the compositor: fire it the way wlroots does
+	 */
+	struct wl_listener *hint_listener = wl_container_of(
+		control.events.set_hint.listener_list.next,
+		hint_listener, link);
+	hint_listener->notify(hint_listener, NULL);
 
 	/* Fire destroy to free the allocated listeners */
 	struct wl_listener *destroy_listener = wl_container_of(

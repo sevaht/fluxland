@@ -302,7 +302,7 @@ wm_tooltip_update(struct wm_server *server)
 	const char *text = NULL;
 	bool tray = false;
 #ifdef WM_HAS_SYSTRAY
-	if (server->systray && wm_toolbar_contains(server->toolbar, lx, ly)) {
+	if (server->systray && wm_pointer_on_toolbar(server, lx, ly)) {
 		text = wm_systray_tooltip_at(server->systray, lx, ly);
 		tray = text != NULL;
 	}

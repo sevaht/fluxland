@@ -53,6 +53,26 @@ validate_view_data(struct wm_server *server, void *data)
 }
 
 /*
+ * Whether the toolbar (and the tray in it) is under the pointer: not when
+ * a fullscreen window is drawn over it, whose clicks are the window's
+ */
+bool
+wm_pointer_on_toolbar(struct wm_server *server, double lx, double ly)
+{
+	if (!wm_toolbar_contains(server->toolbar, lx, ly))
+		return false;
+	double sx, sy;
+	struct wlr_scene_node *node =
+		wlr_scene_node_at(&server->scene->tree.node, lx, ly, &sx, &sy);
+	struct wlr_scene_tree *tree = node ? node->parent : NULL;
+	while (tree && !tree->node.data)
+		tree = tree->node.parent;
+	struct wm_view *view = tree ?
+		validate_view_data(server, tree->node.data) : NULL;
+	return !(view && view->fullscreen);
+}
+
+/*
  * Find the view under the cursor, returning the surface and
  * surface-local coordinates. Returns NULL if no view is found.
  */
@@ -268,7 +288,7 @@ update_pointer_crossing(struct wm_server *server, struct wm_view *view)
 	struct wm_mouse_state *ms = &server->mouse_state;
 	double cx = server->cursor->x, cy = server->cursor->y;
 	uint32_t ctx = 0;
-	if (wm_toolbar_contains(server->toolbar, cx, cy)) {
+	if (wm_pointer_on_toolbar(server, cx, cy)) {
 		ctx = WM_MOUSE_CTX_TOOLBAR;
 		view = NULL;
 	} else if (view) {

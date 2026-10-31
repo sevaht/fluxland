@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- The compositor no longer crashes when a client sets a tearing hint
+  (`wp_tearing_control_v1`, which Wine's Wayland driver does for games). The
+  handler read the hint through the signal's data, which wlroots leaves
+  NULL.
+
 ## [2.0.0] - 2026-10-26
 
 fluxland 2.0 is for Fluxbox users: an existing `~/.fluxbox` works
